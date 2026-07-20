@@ -1,0 +1,19 @@
+# ESP-IDF build outputs
+build/
+
+# Generated local config from menuconfig
+sdkconfig
+sdkconfig.old
+
+# Local tooling/editor caches
+.cache/
+.clangd
+.vscode/
+
+# Python caches for local scripts/tests
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Managed components (optional to commit; ignored by default)
+managed_components/

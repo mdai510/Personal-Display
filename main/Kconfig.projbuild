@@ -1,0 +1,244 @@
+menu "RGB Panel Configuration"
+    choice DISPLAY_LCD_BUFFER_MODE
+        prompt "RGB LCD Buffer Mode"
+        default DISPLAY_USE_SINGLE_FB
+        help
+            Select the LCD buffer mode.
+
+        config DISPLAY_USE_SINGLE_FB
+            bool "Use single frame buffer"
+            help
+                Allocate one frame buffer in the driver.
+                Allocate one draw buffer in LVGL.
+
+        config DISPLAY_USE_DOUBLE_FB
+            bool "Use double frame buffer"
+            help
+                Allocate two frame buffers in the driver.
+                The frame buffers also work as ping-pong draw buffers in LVGL.
+
+        config DISPLAY_USE_BOUNCE_BUFFER
+            bool "Use bounce buffer"
+            help
+                Allocate one frame buffer in the driver.
+                Allocate two bounce buffers in the driver.
+                Allocate one draw buffer in LVGL.
+    endchoice
+
+    choice DISPLAY_LCD_DATA_LINES
+        prompt "RGB LCD Data Lines"
+        default DISPLAY_LCD_DATA_LINES_16
+        help
+            Select the number of data lines of the RGB LCD.
+
+        config DISPLAY_LCD_DATA_LINES_16
+            bool "16 data lines"
+
+        config DISPLAY_LCD_DATA_LINES_24
+            bool "24 data lines"
+    endchoice
+
+    config DISPLAY_LCD_DATA_LINES
+        int
+        default 16 if DISPLAY_LCD_DATA_LINES_16
+        default 24 if DISPLAY_LCD_DATA_LINES_24
+
+    menu "RGB LCD GPIO assignment"
+        config DISPLAY_LCD_VSYNC_GPIO
+            int "VSYNC GPIO"
+            help
+                GPIO pin number for VSYNC signal.
+
+        config DISPLAY_LCD_HSYNC_GPIO
+            int "HSYNC GPIO"
+            help
+                GPIO pin number for HSYNC signal.
+
+        config DISPLAY_LCD_DE_GPIO
+            int "DE GPIO"
+            help
+                GPIO pin number for DE signal.
+
+        config DISPLAY_LCD_PCLK_GPIO
+            int "PCLK GPIO"
+            help
+                GPIO pin number for PCLK signal.
+
+        config DISPLAY_LCD_DATA0_GPIO
+            int "DATA0 GPIO"
+            help
+                GPIO pin number for data bus[0].
+
+        config DISPLAY_LCD_DATA1_GPIO
+            int "DATA1 GPIO"
+            help
+                GPIO pin number for data bus[1].
+
+        config DISPLAY_LCD_DATA2_GPIO
+            int "DATA2 GPIO"
+            help
+                GPIO pin number for data bus[2].
+
+        config DISPLAY_LCD_DATA3_GPIO
+            int "DATA3 GPIO"
+            help
+                GPIO pin number for data bus[3].
+
+        config DISPLAY_LCD_DATA4_GPIO
+            int "DATA4 GPIO"
+            help
+                GPIO pin number for data bus[4].
+
+        config DISPLAY_LCD_DATA5_GPIO
+            int "DATA5 GPIO"
+            help
+                GPIO pin number for data bus[5].
+
+        config DISPLAY_LCD_DATA6_GPIO
+            int "DATA6 GPIO"
+            help
+                GPIO pin number for data bus[6].
+
+        config DISPLAY_LCD_DATA7_GPIO
+            int "DATA7 GPIO"
+            help
+                GPIO pin number for data bus[7].
+
+        config DISPLAY_LCD_DATA8_GPIO
+            int "DATA8 GPIO"
+            help
+                GPIO pin number for data bus[8].
+
+        config DISPLAY_LCD_DATA9_GPIO
+            int "DATA9 GPIO"
+            help
+                GPIO pin number for data bus[9].
+
+        config DISPLAY_LCD_DATA10_GPIO
+            int "DATA10 GPIO"
+            help
+                GPIO pin number for data bus[10].
+
+        config DISPLAY_LCD_DATA11_GPIO
+            int "DATA11 GPIO"
+            help
+                GPIO pin number for data bus[11].
+
+        config DISPLAY_LCD_DATA12_GPIO
+            int "DATA12 GPIO"
+            help
+                GPIO pin number for data bus[12].
+
+        config DISPLAY_LCD_DATA13_GPIO
+            int "DATA13 GPIO"
+            help
+                GPIO pin number for data bus[13].
+
+        config DISPLAY_LCD_DATA14_GPIO
+            int "DATA14 GPIO"
+            help
+                GPIO pin number for data bus[14].
+
+        config DISPLAY_LCD_DATA15_GPIO
+            int "DATA15 GPIO"
+            help
+                GPIO pin number for data bus[15].
+
+        config DISPLAY_LCD_DATA16_GPIO
+            int "DATA16 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[16].
+
+        config DISPLAY_LCD_DATA17_GPIO
+            int "DATA17 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[17].
+
+        config DISPLAY_LCD_DATA18_GPIO
+            int "DATA18 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[18].
+
+        config DISPLAY_LCD_DATA19_GPIO
+            int "DATA19 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[19].
+
+        config DISPLAY_LCD_DATA20_GPIO
+            int "DATA20 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[20].
+
+        config DISPLAY_LCD_DATA21_GPIO
+            int "DATA21 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[21].
+
+        config DISPLAY_LCD_DATA22_GPIO
+            int "DATA22 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[22].
+
+        config DISPLAY_LCD_DATA23_GPIO
+            int "DATA23 GPIO"
+            depends on DISPLAY_LCD_DATA_LINES > 16
+            help
+                GPIO pin number for data bus[23].
+    endmenu
+endmenu
+
+menu "Wi-Fi Station Configuration"
+    config DISPLAY_WIFI_STA_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            SSID used by the ESP32-S3 station interface.
+
+    config DISPLAY_WIFI_STA_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        help
+            Password used by the ESP32-S3 station interface.
+
+    config DISPLAY_WIFI_MAXIMUM_RETRY
+        int "Maximum connection retries"
+        range 1 100
+        default 10
+        help
+            Number of reconnect attempts before giving up.
+
+    choice DISPLAY_WIFI_AUTHMODE
+        prompt "Minimum AP authentication mode"
+        default DISPLAY_WIFI_AUTH_WPA2_PSK
+        help
+            Minimum access point security level accepted during scan.
+
+        config DISPLAY_WIFI_AUTH_OPEN
+            bool "Open"
+
+        config DISPLAY_WIFI_AUTH_WEP
+            bool "WEP"
+
+        config DISPLAY_WIFI_AUTH_WPA_PSK
+            bool "WPA-PSK"
+
+        config DISPLAY_WIFI_AUTH_WPA2_PSK
+            bool "WPA2-PSK"
+
+        config DISPLAY_WIFI_AUTH_WPA_WPA2_PSK
+            bool "WPA/WPA2-PSK"
+
+        config DISPLAY_WIFI_AUTH_WPA2_WPA3_PSK
+            bool "WPA2/WPA3-PSK"
+
+        config DISPLAY_WIFI_AUTH_WPA3_PSK
+            bool "WPA3-PSK"
+    endchoice
+endmenu
