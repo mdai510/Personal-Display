@@ -11,8 +11,7 @@
 
 static const char *TAG = "display";
 
-esp_err_t rgb_lcd_backlight_init(void)
-{
+esp_err_t rgb_lcd_backlight_init(void){
 #if DISPLAY_PIN_NUM_BK_LIGHT >= 0
     // The RGB panel data interface usually does not control the backlight itself,
     // so drive the dedicated backlight GPIO separately when the board provides one.
@@ -26,8 +25,7 @@ esp_err_t rgb_lcd_backlight_init(void)
     return ESP_OK;
 }
 
-void rgb_lcd_backlight_set(bool on)
-{
+void rgb_lcd_backlight_set(bool on){
     if (DISPLAY_PIN_NUM_BK_LIGHT < 0) {
         return;
     }
@@ -35,8 +33,7 @@ void rgb_lcd_backlight_set(bool on)
     gpio_set_level(DISPLAY_PIN_NUM_BK_LIGHT, on ? DISPLAY_LCD_BK_LIGHT_ON_LEVEL : DISPLAY_LCD_BK_LIGHT_OFF_LEVEL);
 }
 
-esp_err_t rgb_lcd_panel_new(esp_lcd_panel_handle_t *panel_handle)
-{
+esp_err_t rgb_lcd_panel_new(esp_lcd_panel_handle_t *panel_handle){
     ESP_RETURN_ON_FALSE(panel_handle, ESP_ERR_INVALID_ARG, TAG, "panel handle is null");
 
     // Fill one esp_lcd_rgb_panel_config_t in one place: bus width, GPIO routing, timing, and frame buffers.
@@ -106,8 +103,7 @@ esp_err_t rgb_lcd_panel_new(esp_lcd_panel_handle_t *panel_handle)
     return esp_lcd_new_rgb_panel(&panel_config, panel_handle);
 }
 
-esp_err_t rgb_lcd_panel_init(esp_lcd_panel_handle_t panel_handle)
-{
+esp_err_t rgb_lcd_panel_init(esp_lcd_panel_handle_t panel_handle){
     ESP_RETURN_ON_FALSE(panel_handle, ESP_ERR_INVALID_ARG, TAG, "panel handle is null");
     // reset() applies the panel reset sequence, while init() starts the RGB output engine.
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(panel_handle), TAG, "reset RGB panel failed");

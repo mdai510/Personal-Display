@@ -39,8 +39,10 @@ static int s_retry_num = 0;
 static esp_ip6_addr_t s_ipv6_addr;
 static bool s_has_ipv6 = false;
 
-static const char *ipv6_type_to_str(esp_ip6_addr_type_t type)
-{
+/*
+* Convert an esp_ip6_addr_type_t to a human-readable string.
+*/
+static const char *ipv6_type_to_str(esp_ip6_addr_type_t type){
   switch (type) {
     case ESP_IP6_ADDR_IS_GLOBAL:
       return "global";
@@ -57,6 +59,9 @@ static const char *ipv6_type_to_str(esp_ip6_addr_type_t type)
   }
 }
 
+/*
+* Event handler for Wi-Fi and IP events.
+*/
 static void event_handler(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data) {
   if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -103,6 +108,9 @@ static void event_handler(void *arg, esp_event_base_t event_base,
   }
 }
 
+/*
+ * Initialize the Wi-Fi station.
+ */
 esp_err_t wifi_station_init(void){
   if (strlen(DISPLAY_WIFI_SSID) == 0) {
     ESP_LOGE(TAG, "Wi-Fi SSID is empty. Set it in menuconfig under Wi-Fi "
@@ -155,6 +163,9 @@ esp_err_t wifi_station_init(void){
     return ret;
 }
 
+/*
+ * Connect the Wi-Fi station to the specified SSID and password.
+ */
 esp_err_t wifi_station_connect(char* ssid, char* password) {
     wifi_config_t wifi_config = {
         .sta =
@@ -190,6 +201,9 @@ esp_err_t wifi_station_connect(char* ssid, char* password) {
     return ESP_FAIL;
 }
 
+/*
+ * Disconnect the Wi-Fi station.
+ */
 esp_err_t wifi_station_disconnect(void){
     if (s_wifi_event_group) {
         vEventGroupDelete(s_wifi_event_group);
@@ -198,6 +212,9 @@ esp_err_t wifi_station_disconnect(void){
     return esp_wifi_disconnect();
 }
 
+/*
+ * Deinitialize the Wi-Fi station.
+ */
 esp_err_t wifi_station_deinit(void){
     esp_err_t ret = esp_wifi_stop();
     if(ret == ESP_ERR_WIFI_NOT_INIT){
@@ -218,6 +235,9 @@ esp_err_t wifi_station_deinit(void){
     return ESP_OK;
 }
 
+/*
+ * Get the current IPv6 address of the Wi-Fi station.
+ */
 esp_err_t wifi_station_get_ipv6(char *ipv6_addr, size_t addr_len){
   if (ipv6_addr == NULL || addr_len == 0) {
     return ESP_ERR_INVALID_ARG;
@@ -235,14 +255,12 @@ esp_err_t wifi_station_get_ipv6(char *ipv6_addr, size_t addr_len){
   return ESP_OK;
 }
 
+/*
+ * Wait for the Wi-Fi station to obtain an IPv6 address, with a timeout.
+ */
 esp_err_t wifi_station_wait_for_ipv6(uint32_t timeout_ms) {
-  if (s_wifi_event_group == NULL) {
-    return ESP_ERR_INVALID_STATE;
-  }
-
-  if (s_has_ipv6) {
-    return ESP_OK;
-  }
+  if (s_wifi_event_group == NULL) return ESP_ERR_INVALID_STATE;
+  if (s_has_ipv6) return ESP_OK;
 
   TickType_t wait_ticks = (timeout_ms == portMAX_DELAY)
                               ? portMAX_DELAY
@@ -253,6 +271,9 @@ esp_err_t wifi_station_wait_for_ipv6(uint32_t timeout_ms) {
   return (bits & WIFI_CONNECTED_IPV6_BIT) ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
+/*
+ * Check if the Wi-Fi station is connected.
+ */
 bool wifi_station_is_connected(void) {
   if (s_wifi_event_group == NULL) {
     return false;
