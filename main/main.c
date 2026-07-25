@@ -12,8 +12,11 @@
 #include "lcd_ui.h"
 #include "wifi.h"
 #include "call_api.h"
+#include "json_parse.h"
+#include "time_sync.h"
 
 static const char *TAG = "display";
+static weather_forecast_t s_forecast;
 
 void app_main(void)
 {
@@ -94,5 +97,43 @@ void app_main(void)
     ret = call_ip_api_with_ipv6(ipv6);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "ip-api call failed: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ip_api_info_t ip_info = {0};
+    ret = get_ip_api_info(&ip_info);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get IP geolocation info from parsed response");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Sync time using UTC offset: %ld (timezone hint: %s)",
+             (long)ip_info.utc_offset_seconds,
+             ip_info.timezone ? ip_info.timezone : "N/A");
+    ret = time_sync_once_with_utc_offset(ip_info.utc_offset_seconds, ip_info.timezone);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SNTP time sync failed: %s", esp_err_to_name(ret));
+    }
+
+    ESP_LOGI(TAG, "Calling Open-Meteo 24h forecast");
+    ret = call_weather_api_24h(ip_info.lat, ip_info.lon, ip_info.timezone);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Open-Meteo 24h call failed: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ESP_LOGI(TAG, "Calling Open-Meteo 7d forecast");
+    ret = call_weather_api_7d(ip_info.lat, ip_info.lon, ip_info.timezone);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Open-Meteo 7d call failed: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ret = get_weather_forecast(&s_forecast);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Weather cached: hourly=%u points, daily=%u points, tz=%s",
+                 (unsigned)s_forecast.hourly_count,
+                 (unsigned)s_forecast.daily_count,
+                 s_forecast.timezone[0] ? s_forecast.timezone : "N/A");
     }
 }

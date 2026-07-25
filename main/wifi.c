@@ -62,44 +62,47 @@ static const char *ipv6_type_to_str(esp_ip6_addr_type_t type){
 /*
 * Event handler for Wi-Fi and IP events.
 */
-static void event_handler(void *arg, esp_event_base_t event_base,
-                          int32_t event_id, void *event_data) {
-  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data){
+  if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START){
     esp_wifi_connect();
-  } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
-    if (sta_netif) {
+  } 
+  else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED){
+    if (sta_netif){
       esp_err_t ret = esp_netif_create_ip6_linklocal(sta_netif);
       if (ret != ESP_OK && ret != ESP_ERR_ESP_NETIF_IP6_ADDR_FAILED) {
         ESP_LOGW(TAG, "Failed to create IPv6 link-local address: %s", esp_err_to_name(ret));
       }
     }
-  } else if (event_base == WIFI_EVENT &&
-             event_id == WIFI_EVENT_STA_DISCONNECTED) {
-    if (s_retry_num < DISPLAY_WIFI_MAX_RETRY) {
+  } 
+  else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED){
+    if (s_retry_num < DISPLAY_WIFI_MAX_RETRY){
       esp_wifi_connect();
       s_retry_num++;
       ESP_LOGI(TAG, "retry to connect to the AP");
-    } else {
+    } 
+    else{
       xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
     }
     s_has_ipv6 = false;
     memset(&s_ipv6_addr, 0, sizeof(s_ipv6_addr));
     xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_IPV6_BIT);
     ESP_LOGI(TAG, "connect to the AP fail");
-  } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+  } 
+  else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP){
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
     s_retry_num = 0;
     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-  } else if (event_base == IP_EVENT && event_id == IP_EVENT_GOT_IP6) {
+  } 
+  else if (event_base == IP_EVENT && event_id == IP_EVENT_GOT_IP6){
     ip_event_got_ip6_t *event = (ip_event_got_ip6_t *)event_data;
-    if (event->esp_netif == sta_netif) {
+    if (event->esp_netif == sta_netif){
       esp_ip6_addr_t ip6 = event->ip6_info.ip;
       esp_ip6_addr_type_t type = esp_netif_ip6_get_addr_type(&ip6);
       ESP_LOGI(TAG, "got ipv6 (%s):" IPV6STR, ipv6_type_to_str(type), IPV62STR(ip6));
 
       // Use only routable global IPv6 for external API requests.
-      if (type == ESP_IP6_ADDR_IS_GLOBAL) {
+      if (type == ESP_IP6_ADDR_IS_GLOBAL){
         s_ipv6_addr = ip6;
         s_has_ipv6 = true;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_IPV6_BIT);
