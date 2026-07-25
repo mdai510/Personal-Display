@@ -48,13 +48,6 @@ void app_main(void)
         return;
     }
 
-    ESP_LOGI(TAG, "Display UI demo");
-    ret = lcd_ui_show_demo();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to render UI demo: %s", esp_err_to_name(ret));
-        return;
-    }
-
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -113,6 +106,12 @@ void app_main(void)
     ret = time_sync_once_with_utc_offset(ip_info.utc_offset_seconds, ip_info.timezone);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "SNTP time sync failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "Display top time band");
+        esp_err_t ui_ret = lcd_ui_show_time_band();
+        if (ui_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to render top time band: %s", esp_err_to_name(ui_ret));
+        }
     }
 
     ESP_LOGI(TAG, "Calling Open-Meteo 24h forecast");

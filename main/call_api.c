@@ -102,8 +102,7 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt){
 	return ESP_OK;
 }
 
-static esp_err_t perform_http_get(const char *url, http_response_buffer_t *response, int *status_code)
-{
+static esp_err_t perform_http_get(const char *url, http_response_buffer_t *response, int *status_code){
 	if (url == NULL || response == NULL || status_code == NULL) {
 		return ESP_ERR_INVALID_ARG;
 	}

@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/lock.h>
 #include <sys/param.h>
 #include "sdkconfig.h"
@@ -53,6 +54,79 @@ static esp_timer_handle_t s_lvgl_tick_timer;
 static lv_style_t style_bullet;
 static lv_obj_t *scale1;
 static const lv_font_t *font_normal = &lv_font_montserrat_14;
+static lv_obj_t *s_time_band = NULL;
+static lv_obj_t *s_date_label = NULL;
+static lv_obj_t *s_time_label = NULL;
+static lv_timer_t *s_time_timer = NULL;
+
+static void update_time_label(void)
+{
+    if (s_date_label == NULL || s_time_label == NULL) {
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm local_tm;
+    localtime_r(&now, &local_tm);
+
+    char date_buf[24];
+    char time_buf[16];
+    strftime(date_buf, sizeof(date_buf), "%a %b %d", &local_tm);
+    strftime(time_buf, sizeof(time_buf), "%H:%M:%S", &local_tm);
+    lv_label_set_text(s_date_label, date_buf);
+    lv_label_set_text(s_time_label, time_buf);
+}
+
+static void time_band_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    update_time_label();
+}
+
+static void render_time_band_ui(lv_display_t *disp)
+{
+    lv_obj_t *screen = lv_display_get_screen_active(disp);
+
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_color(screen, lv_color_hex(0x00FF00), 0);
+
+    if (s_time_band == NULL) {
+        s_time_band = lv_obj_create(screen);
+        lv_obj_remove_style_all(s_time_band);
+        lv_obj_set_size(s_time_band, LV_PCT(100), 44);
+        lv_obj_align(s_time_band, LV_ALIGN_TOP_MID, 0, 0);
+        lv_obj_set_style_bg_color(s_time_band, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(s_time_band, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_side(s_time_band, LV_BORDER_SIDE_BOTTOM, 0);
+        lv_obj_set_style_border_width(s_time_band, 2, 0);
+        lv_obj_set_style_border_color(s_time_band, lv_color_hex(0x00FF00), 0);
+        lv_obj_set_style_pad_hor(s_time_band, 10, 0);
+        lv_obj_set_style_pad_ver(s_time_band, 6, 0);
+
+        s_date_label = lv_label_create(s_time_band);
+        lv_obj_set_style_text_color(s_date_label, lv_color_hex(0x00FF00), 0);
+        lv_obj_set_style_text_font(s_date_label, font_normal, 0);
+        lv_obj_align(s_date_label, LV_ALIGN_LEFT_MID, 0, 0);
+
+        s_time_label = lv_label_create(s_time_band);
+        lv_obj_set_style_text_color(s_time_label, lv_color_hex(0x00FF00), 0);
+        lv_obj_set_style_text_font(s_time_label, font_normal, 0);
+        lv_obj_align(s_time_label, LV_ALIGN_RIGHT_MID, 0, 0);
+    }
+
+    update_time_label();
+
+    if (s_time_timer == NULL) {
+        s_time_timer = lv_timer_create(time_band_timer_cb, 1000, NULL);
+    }
+}
+
+static void render_time_band_ui_cb(lv_display_t *disp, void *user_ctx)
+{
+    (void)user_ctx;
+    render_time_band_ui(disp);
+}
 
 static lv_obj_t *create_scale_box(lv_obj_t *parent, const char *text1, const char *text2, const char *text3)
 {
@@ -347,6 +421,11 @@ esp_err_t lcd_ui_init(esp_lcd_panel_handle_t panel_handle)
 esp_err_t lcd_ui_show_demo(void)
 {
     return lcd_ui_render(render_demo_ui_cb, NULL);
+}
+
+esp_err_t lcd_ui_show_time_band(void)
+{
+    return lcd_ui_render(render_time_band_ui_cb, NULL);
 }
 
 esp_err_t lcd_ui_render(lcd_ui_render_fn_t render_fn, void *user_ctx)
