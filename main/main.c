@@ -121,6 +121,17 @@ void app_main(void)
         return;
     }
 
+    ret = get_weather_forecast(&s_forecast);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Display current weather panel");
+        esp_err_t ui_ret = lcd_ui_show_weather_current();
+        if (ui_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to render current weather: %s", esp_err_to_name(ui_ret));
+        }
+    } else {
+        ESP_LOGE(TAG, "Failed to get weather forecast after 24h parse");
+    }
+
     ESP_LOGI(TAG, "Calling Open-Meteo 7d forecast");
     ret = call_weather_api_7d(ip_info.lat, ip_info.lon, ip_info.timezone);
     if (ret != ESP_OK) {

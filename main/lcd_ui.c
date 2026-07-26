@@ -5,6 +5,7 @@
  */
 
 #include <assert.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <time.h>
 #include <sys/lock.h>
@@ -21,6 +22,7 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_rgb.h"
 #include "rgb_lcd_panel.h"
+#include "json_parse.h"
 #include "lcd_ui.h"
 
 static const char *TAG = "lcd_ui";
@@ -38,12 +40,50 @@ static const char *TAG = "lcd_ui";
 
 #define DISPLAY_LVGL_DRAW_BUF_LINES    50
 #define DISPLAY_LVGL_TICK_PERIOD_MS    2
-#define DISPLAY_LVGL_TASK_STACK_SIZE   (5 * 1024)
+#define DISPLAY_LVGL_TASK_STACK_SIZE   (16 * 1024)
 #define DISPLAY_LVGL_TASK_PRIORITY     2
 #define DISPLAY_LVGL_TASK_MAX_DELAY_MS 500
 #define DISPLAY_LVGL_TASK_MIN_DELAY_MS 1000 / CONFIG_FREERTOS_HZ
 
 #define UI_READY_BIT BIT0
+#define WEATHER_PANEL_TOP_OFFSET 44
+
+typedef struct {
+    int code;
+    const char *day_description;
+    const char *night_description;
+} weather_code_desc_t;
+
+static const weather_code_desc_t s_weather_code_descs[] = {
+    {0,  "Sunny", "Clear"},
+    {1,  "Mainly Sunny", "Mainly Clear"},
+    {2,  "Partly Cloudy", "Partly Cloudy"},
+    {3,  "Cloudy", "Cloudy"},
+    {45, "Foggy", "Foggy"},
+    {48, "Rime Fog", "Rime Fog"},
+    {51, "Light Drizzle", "Light Drizzle"},
+    {53, "Drizzle", "Drizzle"},
+    {55, "Heavy Drizzle", "Heavy Drizzle"},
+    {56, "Light Freezing Drizzle", "Light Freezing Drizzle"},
+    {57, "Freezing Drizzle", "Freezing Drizzle"},
+    {61, "Light Rain", "Light Rain"},
+    {63, "Rain", "Rain"},
+    {65, "Heavy Rain", "Heavy Rain"},
+    {66, "Light Freezing Rain", "Light Freezing Rain"},
+    {67, "Freezing Rain", "Freezing Rain"},
+    {71, "Light Snow", "Light Snow"},
+    {73, "Snow", "Snow"},
+    {75, "Heavy Snow", "Heavy Snow"},
+    {77, "Snow Grains", "Snow Grains"},
+    {80, "Light Showers", "Light Showers"},
+    {81, "Showers", "Showers"},
+    {82, "Heavy Showers", "Heavy Showers"},
+    {85, "Light Snow Showers", "Light Snow Showers"},
+    {86, "Snow Showers", "Snow Showers"},
+    {95, "Thunderstorm", "Thunderstorm"},
+    {96, "Light Thunderstorms With Hail", "Light Thunderstorms With Hail"},
+    {99, "Thunderstorm With Hail", "Thunderstorm With Hail"},
+};
 
 static _lock_t s_lvgl_api_lock;
 static TaskHandle_t s_lvgl_task_handle;
@@ -58,6 +98,41 @@ static lv_obj_t *s_time_band = NULL;
 static lv_obj_t *s_date_label = NULL;
 static lv_obj_t *s_time_label = NULL;
 static lv_timer_t *s_time_timer = NULL;
+static lv_obj_t *s_weather_panel = NULL;
+static lv_obj_t *s_weather_desc_label = NULL;
+static lv_obj_t *s_weather_temp_label = NULL;
+static lv_obj_t *s_weather_humidity_label = NULL;
+static lv_obj_t *s_weather_wind_label = NULL;
+static lv_obj_t *s_weather_cloud_label = NULL;
+static lv_obj_t *s_weather_precip_label = NULL;
+
+static void format_value_1dp(char *buf, size_t buf_len, const char *prefix, float value, const char *suffix)
+{
+    int scaled = (int)(value * 10.0f + (value >= 0.0f ? 0.5f : -0.5f));
+    int abs_scaled = (scaled < 0) ? -scaled : scaled;
+    int whole = abs_scaled / 10;
+    int frac = abs_scaled % 10;
+    snprintf(buf, buf_len, "%s%s%d.%d%s", prefix, (scaled < 0) ? "-" : "", whole, frac, suffix);
+}
+
+static void format_value_2dp(char *buf, size_t buf_len, const char *prefix, float value, const char *suffix)
+{
+    int scaled = (int)(value * 100.0f + (value >= 0.0f ? 0.5f : -0.5f));
+    int abs_scaled = (scaled < 0) ? -scaled : scaled;
+    int whole = abs_scaled / 100;
+    int frac = abs_scaled % 100;
+    snprintf(buf, buf_len, "%s%s%d.%02d%s", prefix, (scaled < 0) ? "-" : "", whole, frac, suffix);
+}
+
+static const char *weather_code_to_description(int code, bool is_day)
+{
+    for (size_t i = 0; i < sizeof(s_weather_code_descs) / sizeof(s_weather_code_descs[0]); i++) {
+        if (s_weather_code_descs[i].code == code) {
+            return is_day ? s_weather_code_descs[i].day_description : s_weather_code_descs[i].night_description;
+        }
+    }
+    return "Unknown";
+}
 
 static void update_time_label(void)
 {
@@ -126,6 +201,90 @@ static void render_time_band_ui_cb(lv_display_t *disp, void *user_ctx)
 {
     (void)user_ctx;
     render_time_band_ui(disp);
+}
+
+static void render_weather_current_ui(lv_display_t *disp)
+{
+    weather_forecast_t forecast = {0};
+    if (get_weather_forecast(&forecast) != ESP_OK) {
+        ESP_LOGW(TAG, "Weather forecast not ready yet");
+        return;
+    }
+
+    lv_obj_t *screen = lv_display_get_screen_active(disp);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_color(screen, lv_color_hex(0x00FF00), 0);
+
+    if (s_weather_panel == NULL) {
+        s_weather_panel = lv_obj_create(screen);
+        lv_obj_remove_style_all(s_weather_panel);
+        lv_obj_set_pos(s_weather_panel, 0, WEATHER_PANEL_TOP_OFFSET);
+        lv_obj_set_size(s_weather_panel, LV_PCT(50), (DISPLAY_LCD_V_RES - WEATHER_PANEL_TOP_OFFSET) / 3);
+        lv_obj_set_style_bg_color(s_weather_panel, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(s_weather_panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(s_weather_panel, 0, 0);
+        lv_obj_set_style_pad_left(s_weather_panel, 10, 0);
+        lv_obj_set_style_pad_right(s_weather_panel, 10, 0);
+        lv_obj_set_style_pad_top(s_weather_panel, 6, 0);
+        lv_obj_set_style_pad_bottom(s_weather_panel, 6, 0);
+        lv_obj_set_style_pad_row(s_weather_panel, 4, 0);
+        lv_obj_set_flex_flow(s_weather_panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(s_weather_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+        s_weather_desc_label = lv_label_create(s_weather_panel);
+        s_weather_temp_label = lv_label_create(s_weather_panel);
+        s_weather_humidity_label = lv_label_create(s_weather_panel);
+        s_weather_wind_label = lv_label_create(s_weather_panel);
+        s_weather_cloud_label = lv_label_create(s_weather_panel);
+        s_weather_precip_label = lv_label_create(s_weather_panel);
+
+        lv_obj_t *labels[] = {
+            s_weather_desc_label,
+            s_weather_temp_label,
+            s_weather_humidity_label,
+            s_weather_wind_label,
+            s_weather_cloud_label,
+            s_weather_precip_label,
+        };
+        for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); i++) {
+            lv_obj_set_style_text_color(labels[i], lv_color_hex(0x00FF00), 0);
+            lv_obj_set_style_text_font(labels[i], font_normal, 0);
+            lv_obj_set_width(labels[i], LV_PCT(100));
+            lv_label_set_long_mode(labels[i], LV_LABEL_LONG_WRAP);
+        }
+    }
+
+    const weather_current_t *current = &forecast.current;
+    const char *description = weather_code_to_description(current->weather_code, current->is_day != 0);
+    float precipitation_inches = current->precipitation;
+    if (precipitation_inches <= 0.0f) {
+        precipitation_inches = current->rain + current->showers + current->snowfall;
+    }
+
+    char value_buf[48];
+
+    lv_label_set_text(s_weather_desc_label, description);
+    format_value_1dp(value_buf, sizeof(value_buf), "Temp: ", current->temperature_2m, " F");
+    lv_label_set_text(s_weather_temp_label, value_buf);
+    lv_label_set_text_fmt(s_weather_humidity_label, "Humidity: %d%%", current->relative_humidity_2m);
+    format_value_1dp(value_buf, sizeof(value_buf), "Wind: ", current->wind_speed_10m, " mph");
+    lv_label_set_text(s_weather_wind_label, value_buf);
+    lv_label_set_text_fmt(s_weather_cloud_label, "Cloud: %d%%", current->cloud_cover);
+
+    if (precipitation_inches > 0.0f) {
+        lv_obj_clear_flag(s_weather_precip_label, LV_OBJ_FLAG_HIDDEN);
+        format_value_2dp(value_buf, sizeof(value_buf), "Precip: ", precipitation_inches, " in");
+        lv_label_set_text(s_weather_precip_label, value_buf);
+    } else {
+        lv_obj_add_flag(s_weather_precip_label, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void render_weather_current_ui_cb(lv_display_t *disp, void *user_ctx)
+{
+    (void)user_ctx;
+    render_weather_current_ui(disp);
 }
 
 static lv_obj_t *create_scale_box(lv_obj_t *parent, const char *text1, const char *text2, const char *text3)
@@ -329,6 +488,12 @@ static void increase_lvgl_tick(void *arg)
     lv_tick_inc(DISPLAY_LVGL_TICK_PERIOD_MS);
 }
 
+/*
+ * LVGL task to handle LVGL timers and events. 
+ * lv_timer_handler() processes LVGL timers and events. 
+ * The task sleeps for a duration determined by the time until the next LVGL timer is due, 
+ * ensuring efficient CPU usage while maintaining responsive UI updates.
+*/
 static void lvgl_port_task(void *arg)
 {
     (void)arg;
@@ -426,6 +591,11 @@ esp_err_t lcd_ui_show_demo(void)
 esp_err_t lcd_ui_show_time_band(void)
 {
     return lcd_ui_render(render_time_band_ui_cb, NULL);
+}
+
+esp_err_t lcd_ui_show_weather_current(void)
+{
+    return lcd_ui_render(render_weather_current_ui_cb, NULL);
 }
 
 esp_err_t lcd_ui_render(lcd_ui_render_fn_t render_fn, void *user_ctx)
