@@ -4,16 +4,19 @@
  * SPDX-License-Identifier: CC0-1.0
  */
 
-#include "sdkconfig.h"
+#include "call_api.h"
+#include "cap_touch.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "json_parse.h"
+#include "lcd_ui.h"
 #include "nvs_flash.h"
 #include "rgb_lcd_panel.h"
-#include "lcd_ui.h"
-#include "wifi.h"
-#include "call_api.h"
-#include "json_parse.h"
+#include "sdkconfig.h"
 #include "time_sync.h"
+#include "wifi.h"
 
 static const char *TAG = "display";
 static weather_forecast_t s_forecast;
@@ -48,6 +51,7 @@ void app_main(void)
         return;
     }
 
+    /*
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -145,5 +149,27 @@ void app_main(void)
                  (unsigned)s_forecast.hourly_count,
                  (unsigned)s_forecast.daily_count,
                  s_forecast.timezone[0] ? s_forecast.timezone : "N/A");
+    }
+    */
+
+    ret = cap_touch_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize capacitive touch: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    while(1){
+        static uint16_t x, y;
+        static bool touch_detected;
+        ret = cap_touch_read(&x, &y, &touch_detected);
+        if (ret == ESP_OK && touch_detected) {
+            ESP_LOGI(TAG, "Touch detected at coordinates: (%u, %u)", x, y);
+            // Handle touch event here
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            // No new touch data available
+        } else if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Error reading capacitive touch: %s", esp_err_to_name(ret));
+        }
+        vTaskDelay(pdMS_TO_TICKS(20)); // Polling delay
     }
 }
