@@ -5,7 +5,11 @@
 #include "i2c.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <stdint.h>
 #include <string.h>
+
+static const char *TAG = "cap_touch";
+static TaskHandle_t s_cap_touch_task_handle = NULL;
 
 static i2c_master_dev_handle_t gt911_handle;
 static i2c_master_dev_handle_t pca9557_handle;
@@ -73,6 +77,29 @@ static esp_err_t cap_touch_reset(void){
     return ESP_OK;
 }
 
+void cap_touch_task(void *pvParameters){
+  while (1) {
+    static uint16_t x, y;
+    static uint16_t last_x, last_y = UINT16_MAX;
+    static bool touch_detected;
+    esp_err_t ret = cap_touch_read(&x, &y, &touch_detected);
+    if (ret == ESP_OK && touch_detected) {
+        if(x != last_x || y != last_y){
+          ESP_LOGI(TAG, "Touch detected at coordinates: (%u, %u)", x, y);
+          // Handle touch event here
+          last_x = x;
+          last_y = y;
+        }
+        //here, touch coord same as last, so no new touch
+    } else if (ret == ESP_ERR_NOT_FOUND) {
+      // No new touch data available
+    } else if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Error reading capacitive touch: %s", esp_err_to_name(ret));
+    }
+    vTaskDelay(pdMS_TO_TICKS(20)); // Polling delay
+  }
+}
+
 esp_err_t cap_touch_init(void) {
     if(!i2c_has_master_started()) {
         if(i2c_start_master() != ESP_OK) {
@@ -92,6 +119,9 @@ esp_err_t cap_touch_init(void) {
     }
 
     ESP_RETURN_ON_ERROR(cap_touch_reset(), "cap_touch", "Failed to reset cap touch");
+
+    //register cap touch task
+    xTaskCreate(cap_touch_task, "cap_touch_task", (4 * 1024), NULL, 1, &s_cap_touch_task_handle);
 
     return ESP_OK;
 }
@@ -151,6 +181,7 @@ esp_err_t cap_touch_read(uint16_t *x, uint16_t *y, bool *touch_detected) {
         *touch_detected = false;
         status = 0;
         ESP_RETURN_ON_ERROR(gt911_write_u8(GT911_REG_STATUS, status), "cap_touch", "Failed to clear GT911 status register");
+        return ESP_OK;
     }
     //read touch coordinates from GT911
     uint8_t coords[4];

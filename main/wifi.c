@@ -32,6 +32,7 @@ static const char *TAG = "wifi station";
 esp_netif_t *sta_netif = NULL;
 static esp_event_handler_instance_t ip_event_handler;
 static esp_event_handler_instance_t wifi_event_handler;
+static bool s_wifi_initialized = false;
 
 static int s_retry_num = 0;
 
@@ -115,6 +116,10 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
  * Initialize the Wi-Fi station.
  */
 esp_err_t wifi_station_init(void){
+  if (s_wifi_initialized) {
+    return ESP_OK;
+  }
+
   if (strlen(DISPLAY_WIFI_SSID) == 0) {
     ESP_LOGE(TAG, "Wi-Fi SSID is empty. Set it in menuconfig under Wi-Fi "
                   "Station Configuration.");
@@ -129,6 +134,9 @@ esp_err_t wifi_station_init(void){
     }
 
     s_wifi_event_group = xEventGroupCreate();
+    if (s_wifi_event_group == NULL) {
+      return ESP_ERR_NO_MEM;
+    }
 
     ret = esp_netif_init();
     if (ret != ESP_OK) {
@@ -163,6 +171,7 @@ esp_err_t wifi_station_init(void){
         &wifi_event_handler));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         IP_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &ip_event_handler));
+    s_wifi_initialized = true;
     return ret;
 }
 
@@ -208,10 +217,6 @@ esp_err_t wifi_station_connect(char* ssid, char* password) {
  * Disconnect the Wi-Fi station.
  */
 esp_err_t wifi_station_disconnect(void){
-    if (s_wifi_event_group) {
-        vEventGroupDelete(s_wifi_event_group);
-    }
-
     return esp_wifi_disconnect();
 }
 
@@ -219,8 +224,12 @@ esp_err_t wifi_station_disconnect(void){
  * Deinitialize the Wi-Fi station.
  */
 esp_err_t wifi_station_deinit(void){
+  if (!s_wifi_initialized) {
+    return ESP_OK;
+  }
+
     esp_err_t ret = esp_wifi_stop();
-    if(ret == ESP_ERR_WIFI_NOT_INIT){
+  if(ret == ESP_ERR_WIFI_NOT_INIT){
         ESP_LOGE(TAG, "Wifi stack not initialized, cannot stop");
         return ret;
     }
@@ -234,6 +243,16 @@ esp_err_t wifi_station_deinit(void){
         IP_EVENT, ESP_EVENT_ANY_ID, ip_event_handler));
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
         WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler));
+
+    if (s_wifi_event_group != NULL) {
+      vEventGroupDelete(s_wifi_event_group);
+      s_wifi_event_group = NULL;
+    }
+    sta_netif = NULL;
+    s_retry_num = 0;
+    s_has_ipv6 = false;
+    memset(&s_ipv6_addr, 0, sizeof(s_ipv6_addr));
+    s_wifi_initialized = false;
 
     return ESP_OK;
 }

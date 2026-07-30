@@ -13,5 +13,6 @@ esp_err_t lcd_ui_render(lcd_ui_render_fn_t render_fn, void *user_ctx);
 esp_err_t lcd_ui_show_demo(void);
 esp_err_t lcd_ui_show_time_band(void);
 esp_err_t lcd_ui_show_weather_current(void);
+esp_err_t lcd_ui_show_starting(void);
 bool lcd_ui_is_initialized(void);
 esp_err_t lcd_ui_wait_until_ready(uint32_t timeout_ms);

@@ -287,6 +287,27 @@ static void render_weather_current_ui_cb(lv_display_t *disp, void *user_ctx)
     render_weather_current_ui(disp);
 }
 
+static void render_starting_ui(lv_display_t *disp)
+{
+    lv_obj_t *screen = lv_display_get_screen_active(disp);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+
+    lv_obj_clean(screen);
+
+    lv_obj_t *label = lv_label_create(screen);
+    lv_label_set_text(label, "starting...");
+    lv_obj_set_style_text_color(label, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_style_text_font(label, font_normal, 0);
+    lv_obj_center(label);
+}
+
+static void render_starting_ui_cb(lv_display_t *disp, void *user_ctx)
+{
+    (void)user_ctx;
+    render_starting_ui(disp);
+}
+
 static lv_obj_t *create_scale_box(lv_obj_t *parent, const char *text1, const char *text2, const char *text3)
 {
     lv_obj_t *scale = lv_scale_create(parent);
@@ -596,6 +617,11 @@ esp_err_t lcd_ui_show_time_band(void)
 esp_err_t lcd_ui_show_weather_current(void)
 {
     return lcd_ui_render(render_weather_current_ui_cb, NULL);
+}
+
+esp_err_t lcd_ui_show_starting(void)
+{
+    return lcd_ui_render(render_starting_ui_cb, NULL);
 }
 
 esp_err_t lcd_ui_render(lcd_ui_render_fn_t render_fn, void *user_ctx)

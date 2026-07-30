@@ -1,0 +1,177 @@
+#include "wifi_call.h"
+
+#include "call_api.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "json_parse.h"
+#include "lcd_ui.h"
+#include "time_sync.h"
+#include "wifi.h"
+#include <string.h>
+
+#define WIFI_CALL_TASK_STACK_SIZE (6 * 1024)
+#define WIFI_CALL_TASK_PRIORITY 1
+#define WIFI_CALL_INTERVAL_MS (30 * 60 * 1000) //30 mins between each weather api call 
+#define WIFI_CALL_IPV6_WAIT_MS 15000
+
+static const char *TAG = "wifi_call";
+static TaskHandle_t s_wifi_call_task_handle;
+static ip_api_info_t s_ip_info;
+static bool s_ip_info_ready = false;
+
+esp_err_t wifi_call_fetch_weather_once(void){
+    if (!wifi_station_is_connected()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!s_ip_info_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t ret;
+
+    ESP_LOGI(TAG, "Calling Open-Meteo 24h forecast");
+    ret = call_weather_api_24h(s_ip_info.lat, s_ip_info.lon, s_ip_info.timezone);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Open-Meteo 24h call failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "Calling Open-Meteo 7d forecast");
+    ret = call_weather_api_7d(s_ip_info.lat, s_ip_info.lon, s_ip_info.timezone);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Open-Meteo 7d call failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    weather_forecast_t forecast = {0};
+    ret = get_weather_forecast(&forecast);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Weather cached: hourly=%u points, daily=%u points, tz=%s",
+                 (unsigned)forecast.hourly_count,
+                 (unsigned)forecast.daily_count,
+                 forecast.timezone[0] ? forecast.timezone : "N/A");
+        esp_err_t ui_ret = lcd_ui_show_weather_current();
+        if (ui_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to render current weather: %s", esp_err_to_name(ui_ret));
+        }
+    } else {
+        ESP_LOGE(TAG, "Failed to get weather forecast after parse");
+    }
+    return ret;
+}
+
+static esp_err_t wifi_call_refresh_once(void)
+{
+    if (!s_ip_info_ready) {
+        esp_err_t ui_ret = lcd_ui_show_starting();
+        if (ui_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to render startup screen: %s", esp_err_to_name(ui_ret));
+        }
+    }
+
+    esp_err_t ret = wifi_station_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Wi-Fi init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    ret = wifi_station_connect(DISPLAY_WIFI_SSID, DISPLAY_WIFI_PASS);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Wi-Fi connect failed: %s", esp_err_to_name(ret));
+        goto done;
+    }
+
+    if (!s_ip_info_ready) {
+        ret = wifi_station_wait_for_ipv6(WIFI_CALL_IPV6_WAIT_MS);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "IPv6 was not ready within timeout: %s", esp_err_to_name(ret));
+            goto done;
+        }
+
+        char ipv6[64] = {0};
+        ret = wifi_station_get_ipv6(ipv6, sizeof(ipv6));
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to read station IPv6: %s", esp_err_to_name(ret));
+            goto done;
+        }
+
+        ESP_LOGI(TAG, "Calling ip-api with IPv6: %s", ipv6);
+        ret = call_ip_api_with_ipv6(ipv6);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "ip-api call failed: %s", esp_err_to_name(ret));
+            goto done;
+        }
+
+        memset(&s_ip_info, 0, sizeof(s_ip_info));
+        ret = get_ip_api_info(&s_ip_info);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to get IP geolocation info from parsed response");
+            goto done;
+        }
+
+        s_ip_info_ready = true;
+
+        ESP_LOGI(TAG, "Sync time using UTC offset: %ld (timezone hint: %s)",
+                 (long)s_ip_info.utc_offset_seconds,
+                 s_ip_info.timezone ? s_ip_info.timezone : "N/A");
+        ret = time_sync_once_with_utc_offset(s_ip_info.utc_offset_seconds, s_ip_info.timezone);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "SNTP time sync failed: %s", esp_err_to_name(ret));
+        } else {
+            esp_err_t ui_ret = lcd_ui_show_time_band();
+            if (ui_ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to render top time band: %s", esp_err_to_name(ui_ret));
+            }
+        }
+    }
+
+    ret = wifi_call_fetch_weather_once();
+
+done:
+    {
+        esp_err_t deinit_ret = wifi_station_deinit();
+        if (deinit_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Wi-Fi deinit failed: %s", esp_err_to_name(deinit_ret));
+        }
+    }
+    return ret;
+}
+
+static void wifi_call_task(void *arg)
+{
+    (void)arg;
+    TickType_t last_wake = xTaskGetTickCount();
+    const TickType_t interval_ticks = pdMS_TO_TICKS(WIFI_CALL_INTERVAL_MS);
+
+    while (1) {
+        esp_err_t ret = wifi_call_refresh_once();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Weather cycle completed with errors: %s", esp_err_to_name(ret));
+        }
+        vTaskDelayUntil(&last_wake, interval_ticks);
+    }
+}
+
+esp_err_t wifi_call_start(void)
+{
+    if (s_wifi_call_task_handle != NULL) {
+        return ESP_OK;
+    }
+
+    BaseType_t created = xTaskCreate(
+        wifi_call_task,
+        "wifi_call",
+        WIFI_CALL_TASK_STACK_SIZE,
+        NULL,
+        WIFI_CALL_TASK_PRIORITY,
+        &s_wifi_call_task_handle);
+
+    if (created != pdPASS) {
+        s_wifi_call_task_handle = NULL;
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
