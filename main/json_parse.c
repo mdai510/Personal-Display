@@ -176,6 +176,7 @@ esp_err_t process_weather_hourly_response(const char *response, size_t response_
     cJSON *arr_snow = cJSON_GetObjectItemCaseSensitive(hourly, "snowfall");
     cJSON *arr_cloud = cJSON_GetObjectItemCaseSensitive(hourly, "cloud_cover");
     cJSON *arr_code = cJSON_GetObjectItemCaseSensitive(hourly, "weather_code");
+    cJSON *arr_is_day = cJSON_GetObjectItemCaseSensitive(hourly, "is_day");
 
     if (!cJSON_IsArray(arr_time) || !cJSON_IsArray(arr_temp) || !cJSON_IsArray(arr_code)) {
         cJSON_Delete(root);
@@ -192,6 +193,7 @@ esp_err_t process_weather_hourly_response(const char *response, size_t response_
     if (arr_showers) count = min_size(count, (size_t)cJSON_GetArraySize(arr_showers));
     if (arr_snow) count = min_size(count, (size_t)cJSON_GetArraySize(arr_snow));
     if (arr_cloud) count = min_size(count, (size_t)cJSON_GetArraySize(arr_cloud));
+    if (arr_is_day) count = min_size(count, (size_t)cJSON_GetArraySize(arr_is_day));
     if (count > WEATHER_HOURLY_POINTS_MAX) {
         count = WEATHER_HOURLY_POINTS_MAX;
     }
@@ -208,6 +210,7 @@ esp_err_t process_weather_hourly_response(const char *response, size_t response_
         p->showers = arr_showers ? json_array_get_f32(arr_showers, i) : 0.0f;
         p->snowfall = arr_snow ? json_array_get_f32(arr_snow, i) : 0.0f;
         p->cloud_cover = arr_cloud ? json_array_get_i32(arr_cloud, i) : 0;
+        p->is_day = arr_is_day ? json_array_get_i32(arr_is_day, i) : 0;
     }
     s_weather_forecast.hourly_count = count;
 

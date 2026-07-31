@@ -2,11 +2,18 @@
 #include "driver/i2c_master.h"
 #include "esp_check.h"
 #include "esp_err.h"
-#include "i2c.h"
 #include "freertos/FreeRTOS.h"
+#include "i2c.h"
 #include "freertos/task.h"
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+
+#define SWIPE_COORD_VARIATION 20 //pixels of variation allowed for swipe detection
+#define SWIPE_MIN_DISTANCE 50 //minimum distance in pixels for a swipe to be registered
+#define SWIPE_AXIS_DOMINANCE 20 //dominant axis gap required to avoid diagonal misclassification
+#define TAP_MAX_TRAVEL 15 //max movement still treated as a tap
+#define GESTURE_COOLDOWN_MS 120 //small dead time after gesture commit
 
 static const char *TAG = "cap_touch";
 static TaskHandle_t s_cap_touch_task_handle = NULL;
@@ -78,26 +85,62 @@ static esp_err_t cap_touch_reset(void){
 }
 
 void cap_touch_task(void *pvParameters){
-  while (1) {
-    static uint16_t x, y;
-    static uint16_t last_x, last_y = UINT16_MAX;
-    static bool touch_detected;
-    esp_err_t ret = cap_touch_read(&x, &y, &touch_detected);
-    if (ret == ESP_OK && touch_detected) {
-        if(x != last_x || y != last_y){
-          ESP_LOGI(TAG, "Touch detected at coordinates: (%u, %u)", x, y);
-          // Handle touch event here
-          last_x = x;
-          last_y = y;
+    (void)pvParameters;
+
+    bool in_touch = false;
+    uint16_t start_x = 0;
+    uint16_t start_y = 0;
+    uint16_t last_x = 0;
+    uint16_t last_y = 0;
+
+    while (1) {
+        uint16_t x = 0;
+        uint16_t y = 0;
+        bool touch_detected = false;
+        esp_err_t ret = cap_touch_read(&x, &y, &touch_detected);
+
+        if (ret == ESP_OK && touch_detected) {
+            if (!in_touch) {
+                in_touch = true;
+                start_x = x;
+                start_y = y;
+            }
+            last_x = x;
+            last_y = y;
+        } else if (ret == ESP_OK && !touch_detected) {
+            if (in_touch) {
+                int dx = (int)last_x - (int)start_x;
+                int dy = (int)last_y - (int)start_y;
+                int abs_dx = abs(dx);
+                int abs_dy = abs(dy);
+
+                if (abs_dx <= TAP_MAX_TRAVEL && abs_dy <= TAP_MAX_TRAVEL){
+                    ESP_LOGI(TAG, "Touch detected at (%d, %d)", last_x, last_y);
+                    //handle tap event here
+                } 
+                else if (abs_dx >= SWIPE_MIN_DISTANCE && abs_dx > (abs_dy + SWIPE_AXIS_DOMINANCE) &&
+                           abs_dy <= (SWIPE_COORD_VARIATION + TAP_MAX_TRAVEL)){
+                    ESP_LOGI(TAG, "Swipe detected: %s", (dx > 0) ? "RIGHT" : "LEFT");
+                    //handle swipe event here
+                } 
+                else if (abs_dy >= SWIPE_MIN_DISTANCE && abs_dy > (abs_dx + SWIPE_AXIS_DOMINANCE) &&
+                           abs_dx <= (SWIPE_COORD_VARIATION + TAP_MAX_TRAVEL)){
+                    ESP_LOGI(TAG, "Swipe detected: %s", (dy > 0) ? "DOWN" : "UP");
+                    //handle swipe event here
+                }
+
+                in_touch = false;
+                vTaskDelay(pdMS_TO_TICKS(GESTURE_COOLDOWN_MS));
+            }
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            // No new touch sample yet.
+        } else {
+            ESP_LOGE(TAG, "Error reading capacitive touch: %s", esp_err_to_name(ret));
+            in_touch = false;
         }
-        //here, touch coord same as last, so no new touch
-    } else if (ret == ESP_ERR_NOT_FOUND) {
-      // No new touch data available
-    } else if (ret != ESP_OK) {
-      ESP_LOGE(TAG, "Error reading capacitive touch: %s", esp_err_to_name(ret));
+
+        vTaskDelay(pdMS_TO_TICKS(20)); // Polling delay
     }
-    vTaskDelay(pdMS_TO_TICKS(20)); // Polling delay
-  }
 }
 
 esp_err_t cap_touch_init(void) {

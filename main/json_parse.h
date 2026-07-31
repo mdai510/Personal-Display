@@ -28,6 +28,7 @@ typedef struct {
   float snowfall;
   int cloud_cover;
   int weather_code;
+  int is_day;
 } weather_hourly_point_t;
 
 typedef struct {

@@ -208,7 +208,7 @@ esp_err_t call_weather_api_24h(double latitude, double longitude, const char *ti
 	int written = snprintf(url, sizeof(url),
 		"http://api.open-meteo.com/v1/forecast"
 		"?latitude=%.6f&longitude=%.6f"
-		"&hourly=temperature_2m,precipitation_probability,precipitation,relative_humidity_2m,rain,showers,snowfall,cloud_cover,weather_code"
+		"&hourly=temperature_2m,precipitation_probability,precipitation,relative_humidity_2m,rain,showers,snowfall,cloud_cover,weather_code,is_day"
 		"&current=temperature_2m,relative_humidity_2m,is_day,showers,snowfall,rain,precipitation,weather_code,wind_speed_10m,cloud_cover"
 		"&timezone=%s&timeformat=unixtime&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch"
 		"&forecast_hours=24",
