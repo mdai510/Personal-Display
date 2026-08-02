@@ -4,6 +4,7 @@
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "i2c.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
 #include <stdlib.h>
 #include <stdint.h>
@@ -23,6 +24,8 @@ static i2c_master_dev_handle_t pca9557_handle;
 
 static uint8_t pca9557_output = 0x00; // Keep track of the output state of PCA9557 pins
 static uint8_t pca9557_config = 0xFF; // Keep track of the configuration state of PCA9557 pins (1=input, 0=output)
+
+static QueueHandle_t s_touch_event_queue = NULL;
 
 /*
 * Here, 2 PCA9557 GPIO outputs are connected to GT911 touch controller's reset and interrupt pins.
@@ -117,16 +120,40 @@ void cap_touch_task(void *pvParameters){
                 if (abs_dx <= TAP_MAX_TRAVEL && abs_dy <= TAP_MAX_TRAVEL){
                     ESP_LOGI(TAG, "Touch detected at (%d, %d)", last_x, last_y);
                     //handle tap event here
+                    touch_event_t event = {
+                        .x = last_x,
+                        .y = last_y,
+                        .touch_type = TAP
+                    };
+                    if (xQueueSend(s_touch_event_queue, &event, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "Touch queue full, dropping TAP event");
+                    }
                 } 
                 else if (abs_dx >= SWIPE_MIN_DISTANCE && abs_dx > (abs_dy + SWIPE_AXIS_DOMINANCE) &&
                            abs_dy <= (SWIPE_COORD_VARIATION + TAP_MAX_TRAVEL)){
                     ESP_LOGI(TAG, "Swipe detected: %s", (dx > 0) ? "RIGHT" : "LEFT");
                     //handle swipe event here
+                    touch_event_t event = {
+                        .x = start_x,
+                        .y = start_y,
+                        .touch_type = (dx > 0) ? SWIPE_RIGHT : SWIPE_LEFT
+                    };
+                    if (xQueueSend(s_touch_event_queue, &event, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "Touch queue full, dropping horizontal swipe");
+                    }
                 } 
                 else if (abs_dy >= SWIPE_MIN_DISTANCE && abs_dy > (abs_dx + SWIPE_AXIS_DOMINANCE) &&
                            abs_dx <= (SWIPE_COORD_VARIATION + TAP_MAX_TRAVEL)){
                     ESP_LOGI(TAG, "Swipe detected: %s", (dy > 0) ? "DOWN" : "UP");
                     //handle swipe event here
+                    touch_event_t event = {
+                        .x =start_x,
+                        .y = start_y,
+                        .touch_type = (dy > 0) ? SWIPE_DOWN : SWIPE_UP
+                    };
+                    if (xQueueSend(s_touch_event_queue, &event, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "Touch queue full, dropping vertical swipe");
+                    }
                 }
 
                 in_touch = false;
@@ -163,10 +190,21 @@ esp_err_t cap_touch_init(void) {
 
     ESP_RETURN_ON_ERROR(cap_touch_reset(), "cap_touch", "Failed to reset cap touch");
 
+    //create cap touch queue
+    s_touch_event_queue = xQueueCreate(10, sizeof(touch_event_t));
+    if (s_touch_event_queue == NULL) {
+        return ESP_FAIL;
+    }
+
     //register cap touch task
     xTaskCreate(cap_touch_task, "cap_touch_task", (4 * 1024), NULL, 1, &s_cap_touch_task_handle);
 
     return ESP_OK;
+}
+
+QueueHandle_t cap_touch_get_event_queue(void)
+{
+    return s_touch_event_queue;
 }
 
 static esp_err_t gt911_read(uint16_t reg_addr, uint8_t *reg_value, size_t value_len) {

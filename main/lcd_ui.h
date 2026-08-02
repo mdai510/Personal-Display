@@ -19,5 +19,6 @@ esp_err_t lcd_ui_show_time_band(void);
 esp_err_t lcd_ui_show_weather_current(void);
 esp_err_t lcd_ui_show_starting(void);
 esp_err_t lcd_ui_set_weather_layout(lcd_ui_weather_layout_t layout);
+esp_err_t lcd_ui_start_weather_coordinator(void);
 bool lcd_ui_is_initialized(void);
 esp_err_t lcd_ui_wait_until_ready(uint32_t timeout_ms);

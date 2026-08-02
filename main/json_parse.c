@@ -236,6 +236,7 @@ esp_err_t process_weather_daily_response(const char *response, size_t response_l
     cJSON *arr_code = cJSON_GetObjectItemCaseSensitive(daily, "weather_code");
     cJSON *arr_tmax = cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_max");
     cJSON *arr_tmin = cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_min");
+    cJSON *arr_pop_max = cJSON_GetObjectItemCaseSensitive(daily, "precipitation_probability_max");
     cJSON *arr_sunrise = cJSON_GetObjectItemCaseSensitive(daily, "sunrise");
     cJSON *arr_sunset = cJSON_GetObjectItemCaseSensitive(daily, "sunset");
     cJSON *arr_daylight = cJSON_GetObjectItemCaseSensitive(daily, "daylight_duration");
@@ -253,6 +254,7 @@ esp_err_t process_weather_daily_response(const char *response, size_t response_l
     count = min_size(count, (size_t)cJSON_GetArraySize(arr_code));
     count = min_size(count, (size_t)cJSON_GetArraySize(arr_tmax));
     count = min_size(count, (size_t)cJSON_GetArraySize(arr_tmin));
+    if (arr_pop_max) count = min_size(count, (size_t)cJSON_GetArraySize(arr_pop_max));
     if (arr_sunrise) count = min_size(count, (size_t)cJSON_GetArraySize(arr_sunrise));
     if (arr_sunset) count = min_size(count, (size_t)cJSON_GetArraySize(arr_sunset));
     if (arr_daylight) count = min_size(count, (size_t)cJSON_GetArraySize(arr_daylight));
@@ -270,6 +272,7 @@ esp_err_t process_weather_daily_response(const char *response, size_t response_l
         d->weather_code = json_array_get_i32(arr_code, i);
         d->temperature_2m_max = json_array_get_f32(arr_tmax, i);
         d->temperature_2m_min = json_array_get_f32(arr_tmin, i);
+        d->precipitation_probability_max = arr_pop_max ? json_array_get_i32(arr_pop_max, i) : 0;
         d->sunrise = arr_sunrise ? json_array_get_i64(arr_sunrise, i) : 0;
         d->sunset = arr_sunset ? json_array_get_i64(arr_sunset, i) : 0;
         d->daylight_duration = arr_daylight ? json_array_get_i32(arr_daylight, i) : 0;

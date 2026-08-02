@@ -133,46 +133,68 @@ esp_err_t wifi_station_init(void){
       ret = nvs_flash_init();
     }
 
-    s_wifi_event_group = xEventGroupCreate();
     if (s_wifi_event_group == NULL) {
-      return ESP_ERR_NO_MEM;
+      s_wifi_event_group = xEventGroupCreate();
+      if (s_wifi_event_group == NULL) {
+        return ESP_ERR_NO_MEM;
+      }
     }
 
     ret = esp_netif_init();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
       ESP_LOGE(TAG, "Failed to initialize TCP/IP network stack");
       return ret;
     }
 
     ret = esp_event_loop_create_default();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
       ESP_LOGE(TAG, "Failed to create default event loop");
       return ret;
     }
 
     ret = esp_wifi_set_default_wifi_sta_handlers();
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
       ESP_LOGE(TAG, "Failed to set default handlers");
       return ret;
     }
 
-    sta_netif = esp_netif_create_default_wifi_sta();
     if (sta_netif == NULL) {
-      ESP_LOGE(TAG, "Failed to create default WiFi STA interface");
-      return ESP_FAIL;
+      sta_netif = esp_netif_create_default_wifi_sta();
+      if (sta_netif == NULL) {
+        ESP_LOGE(TAG, "Failed to create default WiFi STA interface");
+        return ESP_FAIL;
+      }
     }
 
     // Wi-Fi stack configuration parameters
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ret = esp_wifi_init(&cfg);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+      ESP_LOGE(TAG, "Failed to initialize Wi-Fi stack");
+      return ret;
+    }
 
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+    ret = esp_event_handler_instance_register(
         WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL,
-        &wifi_event_handler));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        IP_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &ip_event_handler));
+        &wifi_event_handler);
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to register Wi-Fi event handler: %s", esp_err_to_name(ret));
+      return ret;
+    }
+
+    ret = esp_event_handler_instance_register(
+        IP_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &ip_event_handler);
+    if (ret != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to register IP event handler: %s", esp_err_to_name(ret));
+      return ret;
+    }
+
+    s_retry_num = 0;
+    s_has_ipv6 = false;
+    memset(&s_ipv6_addr, 0, sizeof(s_ipv6_addr));
+    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_CONNECTED_IPV6_BIT);
     s_wifi_initialized = true;
-    return ret;
+    return ESP_OK;
 }
 
 /*
@@ -229,26 +251,40 @@ esp_err_t wifi_station_deinit(void){
   }
 
     esp_err_t ret = esp_wifi_stop();
-  if(ret == ESP_ERR_WIFI_NOT_INIT){
-        ESP_LOGE(TAG, "Wifi stack not initialized, cannot stop");
-        return ret;
+    if (ret != ESP_OK && ret != ESP_ERR_WIFI_NOT_INIT && ret != ESP_ERR_WIFI_NOT_STARTED) {
+      ESP_LOGW(TAG, "Failed to stop Wi-Fi: %s", esp_err_to_name(ret));
     }
 
-    ESP_ERROR_CHECK(esp_wifi_deinit());
-    ESP_ERROR_CHECK(
-        esp_wifi_clear_default_wifi_driver_and_handlers(sta_netif));
-    esp_netif_destroy(sta_netif);
+    ret = esp_event_handler_instance_unregister(
+        IP_EVENT, ESP_EVENT_ANY_ID, ip_event_handler);
+    if (ret != ESP_OK && ret != ESP_ERR_NOT_FOUND && ret != ESP_ERR_INVALID_ARG) {
+      ESP_LOGW(TAG, "Failed to unregister IP event handler: %s", esp_err_to_name(ret));
+    }
 
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
-        IP_EVENT, ESP_EVENT_ANY_ID, ip_event_handler));
-    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
-        WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler));
+    ret = esp_event_handler_instance_unregister(
+        WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler);
+    if (ret != ESP_OK && ret != ESP_ERR_NOT_FOUND && ret != ESP_ERR_INVALID_ARG) {
+      ESP_LOGW(TAG, "Failed to unregister Wi-Fi event handler: %s", esp_err_to_name(ret));
+    }
+
+    if (sta_netif != NULL) {
+      ret = esp_wifi_clear_default_wifi_driver_and_handlers(sta_netif);
+      if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Failed to clear default Wi-Fi handlers: %s", esp_err_to_name(ret));
+      }
+      esp_netif_destroy(sta_netif);
+      sta_netif = NULL;
+    }
+
+    ret = esp_wifi_deinit();
+    if (ret != ESP_OK && ret != ESP_ERR_WIFI_NOT_INIT) {
+      ESP_LOGW(TAG, "Failed to deinit Wi-Fi stack: %s", esp_err_to_name(ret));
+    }
 
     if (s_wifi_event_group != NULL) {
       vEventGroupDelete(s_wifi_event_group);
       s_wifi_event_group = NULL;
     }
-    sta_netif = NULL;
     s_retry_num = 0;
     s_has_ipv6 = false;
     memset(&s_ipv6_addr, 0, sizeof(s_ipv6_addr));

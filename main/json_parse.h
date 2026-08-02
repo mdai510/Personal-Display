@@ -36,6 +36,7 @@ typedef struct {
   int weather_code;
   float temperature_2m_max;
   float temperature_2m_min;
+  int precipitation_probability_max;
   int64_t sunrise;
   int64_t sunset;
   int daylight_duration;

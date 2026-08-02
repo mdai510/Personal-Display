@@ -7,8 +7,6 @@
 #include "cap_touch.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "lcd_ui.h"
 #include "rgb_lcd_panel.h"
 #include "sdkconfig.h"
@@ -46,15 +44,28 @@ void app_main(void)
         return;
     }
 
+    ret = lcd_ui_show_starting();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to render startup screen: %s", esp_err_to_name(ret));
+        return;
+    }
+
     ret = cap_touch_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize capacitive touch: %s", esp_err_to_name(ret));
-        return;
+      ESP_LOGE(TAG, "Failed to initialize capacitive touch: %s",
+               esp_err_to_name(ret));
+      return;
     }
 
     ret = wifi_call_start();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start Wi-Fi call service: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ret = lcd_ui_start_weather_coordinator();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start UI weather coordinator: %s", esp_err_to_name(ret));
         return;
     }
 }

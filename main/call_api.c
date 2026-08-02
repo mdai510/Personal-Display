@@ -241,14 +241,18 @@ esp_err_t call_weather_api_7d(double latitude, double longitude, const char *tim
 	ESP_RETURN_ON_ERROR(url_encode(tz, encoded_tz, sizeof(encoded_tz)), TAG, "Failed to URL-encode timezone");
 
 	char url[768] = {0};
-	int written = snprintf(url, sizeof(url),
-		"http://api.open-meteo.com/v1/forecast"
-		"?latitude=%.6f&longitude=%.6f"
-		"&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,daylight_duration,rain_sum,snowfall_sum,showers_sum,wind_speed_10m_max"
-		"&timezone=%s&timeformat=unixtime&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch"
-		"&forecast_days=7",
-		latitude, longitude, encoded_tz);
-	if (written < 0 || (size_t)written >= sizeof(url)) {
+        int written = snprintf(
+            url, sizeof(url),
+            "http://api.open-meteo.com/v1/forecast"
+            "?latitude=%.6f&longitude=%.6f"
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,"
+            "sunset,daylight_duration,rain_sum,snowfall_sum,showers_sum,wind_"
+            "speed_10m_max,precipitation_probability_max"
+            "&timezone=%s&timeformat=unixtime&wind_speed_unit=mph&temperature_"
+            "unit=fahrenheit&precipitation_unit=inch"
+            "&forecast_days=7",
+            latitude, longitude, encoded_tz);
+        if (written < 0 || (size_t)written >= sizeof(url)) {
 		return ESP_ERR_INVALID_SIZE;
 	}
 
