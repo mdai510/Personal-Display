@@ -6,6 +6,9 @@
 
 static i2c_master_bus_handle_t master_bus_handle;
 
+/*
+ * Start the I2C master.
+ */
 esp_err_t i2c_start_master(void){
     i2c_master_bus_config_t master_bus_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -19,10 +22,16 @@ esp_err_t i2c_start_master(void){
     return i2c_new_master_bus(&master_bus_config, &master_bus_handle);
 }
 
+/*
+ * Check if the I2C master has started.
+ */
 bool i2c_has_master_started(void){
     return master_bus_handle != NULL;
 }
 
+/*
+ * Get the I2C master handle.
+ */
 esp_err_t i2c_get_master_handle(i2c_master_bus_handle_t *out_handle){
     if (out_handle == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -34,10 +43,16 @@ esp_err_t i2c_get_master_handle(i2c_master_bus_handle_t *out_handle){
     return ESP_OK;
 }
 
+/*
+ * Stop the I2C master.
+ */
 esp_err_t i2c_stop_master(void){
     return i2c_del_master_bus(master_bus_handle);
 }
 
+/*
+ * Create an I2C device on the master bus.
+ */
 esp_err_t i2c_device_create(i2c_master_dev_handle_t *dev_handle, uint16_t device_address){
     i2c_device_config_t device_config = {
         .device_address = device_address,

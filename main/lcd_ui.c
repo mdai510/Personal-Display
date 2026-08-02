@@ -276,6 +276,9 @@ static lv_obj_t *create_hourly_forecast_cell(lv_obj_t *parent,
                                              lv_obj_t **pop_icon_label_out,
                                              lv_obj_t **pop_label_out);
 
+/*
+ * Format a floating-point value with 1 decimal place, including optional prefix and suffix.
+ */
 static void format_value_1dp(char *buf, size_t buf_len, const char *prefix, float value, const char *suffix)
 {
     int scaled = (int)(value * 10.0f + (value >= 0.0f ? 0.5f : -0.5f));
@@ -285,6 +288,9 @@ static void format_value_1dp(char *buf, size_t buf_len, const char *prefix, floa
     snprintf(buf, buf_len, "%s%s%d.%d%s", prefix, (scaled < 0) ? "-" : "", whole, frac, suffix);
 }
 
+/*
+ * Encode a Unicode codepoint as UTF-8.
+ */
 static size_t utf8_encode_codepoint(char *dst, size_t dst_len, uint32_t codepoint)
 {
     if (dst == NULL || dst_len == 0) {
@@ -326,6 +332,9 @@ static size_t utf8_encode_codepoint(char *dst, size_t dst_len, uint32_t codepoin
     return 4;
 }
 
+/*
+ * Check if the weather icon font has a glyph for the given codepoint.
+ */
 static bool weather_icon_font_has_glyph(const lv_font_t *font, uint32_t codepoint)
 {
     if (font == NULL) {
@@ -336,6 +345,9 @@ static bool weather_icon_font_has_glyph(const lv_font_t *font, uint32_t codepoin
     return lv_font_get_glyph_dsc(font, &dsc, codepoint, 0);
 }
 
+/*
+ * Get the Unicode codepoint for a weather icon ID.
+ */
 static uint32_t weather_icon_get_codepoint(const lv_font_t *font, weather_icon_id_t icon_id)
 {
     if (font == NULL || icon_id < 0 || icon_id >= WEATHER_ICON_COUNT) {
@@ -353,6 +365,9 @@ static uint32_t weather_icon_get_codepoint(const lv_font_t *font, weather_icon_i
     return s_weather_icon_codepoint_lookup_24[icon_id];
 }
 
+/*
+ * Convert a weather code to a weather icon ID.
+ */
 static weather_icon_id_t weather_code_to_icon_id(int code, bool is_day)
 {
     switch (code) {
@@ -400,6 +415,9 @@ static weather_icon_id_t weather_code_to_icon_id(int code, bool is_day)
     }
 }
 
+/*
+ * Convert a weather code to a human-readable interpretation.
+ */
 static const char *weather_code_to_interpretation(int code)
 {
     switch (code) {
@@ -449,6 +467,9 @@ static const char *weather_code_to_interpretation(int code)
     }
 }
 
+/*
+ * Set a label to display a weather icon based on the icon ID.
+ */
 static bool set_label_to_icon_id(lv_obj_t *label, const lv_font_t *font, weather_icon_id_t icon_id)
 {
     if (label == NULL || font == NULL) {
@@ -471,6 +492,9 @@ static bool set_label_to_icon_id(lv_obj_t *label, const lv_font_t *font, weather
     return true;
 }
 
+/*
+ * Create a row in the weather metrics section with an icon label and a value label.
+ */
 static lv_obj_t *create_weather_metric_row(lv_obj_t *parent, lv_obj_t **icon_label_out, lv_obj_t **value_label_out)
 {
     if (parent == NULL || icon_label_out == NULL || value_label_out == NULL) {
@@ -498,6 +522,9 @@ static lv_obj_t *create_weather_metric_row(lv_obj_t *parent, lv_obj_t **icon_lab
     return row;
 }
 
+/*
+ * Create a row in the weather header section with an icon label and a temperature label.
+ */
 static lv_obj_t *create_weather_header_row(lv_obj_t *parent, lv_obj_t **icon_label_out, lv_obj_t **temp_label_out)
 {
     if (parent == NULL || icon_label_out == NULL || temp_label_out == NULL) {
@@ -525,6 +552,9 @@ static lv_obj_t *create_weather_header_row(lv_obj_t *parent, lv_obj_t **icon_lab
     return row;
 }
 
+/*
+ * Create a row in the weather right icon section with an icon label and a value label.
+ */
 static lv_obj_t *create_weather_right_icon_row(lv_obj_t *parent, lv_obj_t **icon_label_out, lv_obj_t **value_label_out)
 {
     if (parent == NULL || icon_label_out == NULL || value_label_out == NULL) {
@@ -553,6 +583,9 @@ static lv_obj_t *create_weather_right_icon_row(lv_obj_t *parent, lv_obj_t **icon
     return row;
 }
 
+/*
+ * Create a row in the weather forecast section with date, icon, high/low temperature, and precipitation probability labels.
+ */
 static lv_obj_t *create_weather_forecast_row(lv_obj_t *parent,
                                              lv_obj_t **date_label_out,
                                              lv_obj_t **icon_label_out,
@@ -636,6 +669,9 @@ static lv_obj_t *create_weather_forecast_row(lv_obj_t *parent,
     return row;
 }
 
+/*
+ * Create a cell in the hourly forecast section with hour, icon, high/low temperature, and precipitation probability labels.
+ */
 static lv_obj_t *create_hourly_forecast_cell(lv_obj_t *parent,
                                              lv_obj_t **hour_label_out,
                                              lv_obj_t **icon_label_out,
@@ -694,7 +730,9 @@ static lv_obj_t *create_hourly_forecast_cell(lv_obj_t *parent,
     return cell;
 }
 
-
+/*
+ * Change the layout of a weather panel.
+ */
 static void ui_panel_change_layout(lcd_ui_panel_t *panel, int32_t x, int32_t y, lv_coord_t w, lv_coord_t h)
 {
     if (panel == NULL) {
@@ -712,6 +750,9 @@ static void ui_panel_change_layout(lcd_ui_panel_t *panel, int32_t x, int32_t y, 
     }
 }
 
+/*
+ * Show a weather panel.
+ */
 static void ui_panel_show(lcd_ui_panel_t *panel)
 {
     if (panel == NULL) {
@@ -724,6 +765,9 @@ static void ui_panel_show(lcd_ui_panel_t *panel)
     }
 }
 
+/*
+ * Hide a weather panel.
+ */
 static void ui_panel_hide(lcd_ui_panel_t *panel)
 {
     if (panel == NULL) {
@@ -736,6 +780,9 @@ static void ui_panel_hide(lcd_ui_panel_t *panel)
     }
 }
 
+/*
+ * Apply the layout for the weather panel.
+ */
 static void weather_panel_apply_layout(lcd_ui_weather_layout_t layout)
 {
     lv_coord_t panel_h = (DISPLAY_LCD_V_RES - WEATHER_PANEL_TOP_OFFSET) / 2;
@@ -786,11 +833,17 @@ static void weather_panel_apply_layout(lcd_ui_weather_layout_t layout)
 
 }
 
+/*
+ * Check if a point is within a rectangle.
+ */
 static bool point_in_rect(int x, int y, int x1, int y1, int x2, int y2)
 {
     return x >= x1 && x <= x2 && y >= y1 && y <= y2;
 }
 
+/*
+ * Set the weather daily view.
+ */
 static void set_weather_daily_view(weather_daily_view_t view)
 {
     s_weather_daily_view = view;
@@ -806,6 +859,9 @@ static void set_weather_daily_view(weather_daily_view_t view)
     }
 }
 
+/*
+ * Set the hourly forecast page.
+ */
 static void set_hourly_forecast_page(int page)
 {
     int wrapped = page % HOURLY_FORECAST_PAGE_COUNT;
@@ -822,6 +878,9 @@ static void set_hourly_forecast_page(int page)
     }
 }
 
+/*
+ * Handle touch events for the hourly forecast section.
+ */
 static bool handle_hourly_forecast_touch(const touch_event_t *event)
 {
     if (event == NULL || !s_weather_panel.visible) {
@@ -875,6 +934,9 @@ static bool handle_hourly_forecast_touch(const touch_event_t *event)
     return true;
 }
 
+/*
+ * Handle touch events for the daily weather view section.
+ */
 static bool handle_daily_view_touch(const touch_event_t *event)
 {
     if (event == NULL) {
@@ -909,6 +971,9 @@ static bool handle_daily_view_touch(const touch_event_t *event)
     return false;
 }
 
+/*
+ * Update the time label.
+ */
 static void update_time_label(void)
 {
     if (s_date_label == NULL || s_time_label == NULL) {
@@ -927,6 +992,9 @@ static void update_time_label(void)
     lv_label_set_text(s_time_label, time_buf);
 }
 
+/*
+ * Update the last refreshed label.
+ */
 static void update_last_refreshed_label(void)
 {
     if (s_last_refreshed_label == NULL) {
@@ -954,12 +1022,18 @@ static void update_last_refreshed_label(void)
     lv_label_set_text_fmt(s_last_refreshed_label, "Last Refreshed: %s", refresh_time_buf);
 }
 
+/*
+ * Time band timer callback.
+ */
 static void time_band_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
     update_time_label();
 }
 
+/*
+ * Handle touch events for the time band refresh icon.
+ */
 static bool handle_time_band_refresh_touch(const touch_event_t *event)
 {
     if (event == NULL || event->touch_type != TAP || !s_time_band_panel.visible) {
@@ -1005,6 +1079,9 @@ static bool handle_time_band_refresh_touch(const touch_event_t *event)
     return true;
 }
 
+/*
+ * Render the time band UI.
+ */
 static void render_time_band_ui(lv_display_t *disp)
 {
     lv_obj_t *screen = lv_display_get_screen_active(disp);
@@ -1061,12 +1138,18 @@ static void render_time_band_ui(lv_display_t *disp)
     }
 }
 
+/*
+ * Render the time band UI callback.
+ */
 static void render_time_band_ui_cb(lv_display_t *disp, void *user_ctx)
 {
     (void)user_ctx;
     render_time_band_ui(disp);
 }
 
+/*
+ * Render the weather current UI.
+ */
 static void render_weather_current_ui(lv_display_t *disp)
 {
     weather_forecast_t forecast = {0};
@@ -1416,12 +1499,18 @@ static void render_weather_current_ui(lv_display_t *disp)
     }
 }
 
+/*
+ * Render the weather current UI callback.
+ */
 static void render_weather_current_ui_cb(lv_display_t *disp, void *user_ctx)
 {
     (void)user_ctx;
     render_weather_current_ui(disp);
 }
 
+/*
+ * Render the weather layout UI callback.
+ */
 static void render_weather_layout_cb(lv_display_t *disp, void *user_ctx)
 {
     (void)disp;
@@ -1433,6 +1522,9 @@ static void render_weather_layout_cb(lv_display_t *disp, void *user_ctx)
     weather_panel_apply_layout(s_weather_layout);
 }
 
+/*
+ * Render the starting UI.
+ */
 static void render_starting_ui(lv_display_t *disp)
 {
     lv_obj_t *screen = lv_display_get_screen_active(disp);
@@ -1462,12 +1554,18 @@ static void render_starting_ui(lv_display_t *disp)
     ui_panel_show(&s_starting_panel);
 }
 
+/*
+ * Render the starting UI callback.
+ */
 static void render_starting_ui_cb(lv_display_t *disp, void *user_ctx)
 {
     (void)user_ctx;
     render_starting_ui(disp);
 }
 
+/*
+ * UI weather coordinator task.
+ */
 static void ui_weather_coordinator_task(void *arg)
 {
     (void)arg;
@@ -1602,6 +1700,9 @@ static void lvgl_port_task(void *arg)
     }
 }
 
+/*
+ * Initialize the LCD UI.
+ */
 esp_err_t lcd_ui_init(esp_lcd_panel_handle_t panel_handle)
 {
     if (panel_handle == NULL) {
@@ -1677,21 +1778,33 @@ esp_err_t lcd_ui_init(esp_lcd_panel_handle_t panel_handle)
     return ESP_OK;
 }
 
+/*
+ * Show the time band UI.
+ */
 esp_err_t lcd_ui_show_time_band(void)
 {
     return lcd_ui_render(render_time_band_ui_cb, NULL);
 }
 
+/*
+ * Show the current weather UI.
+ */
 esp_err_t lcd_ui_show_weather_current(void)
 {
     return lcd_ui_render(render_weather_current_ui_cb, NULL);
 }
 
+/*
+ * Show the starting UI.
+ */
 esp_err_t lcd_ui_show_starting(void)
 {
     return lcd_ui_render(render_starting_ui_cb, NULL);
 }
 
+/*
+ * Set the weather layout (big or small).
+ */
 esp_err_t lcd_ui_set_weather_layout(lcd_ui_weather_layout_t layout)
 {
     if (layout != LCD_UI_WEATHER_LAYOUT_BIG && layout != LCD_UI_WEATHER_LAYOUT_SMALL) {
@@ -1700,6 +1813,9 @@ esp_err_t lcd_ui_set_weather_layout(lcd_ui_weather_layout_t layout)
     return lcd_ui_render(render_weather_layout_cb, &layout);
 }
 
+/*
+ * Start the weather coordinator task.
+ */
 esp_err_t lcd_ui_start_weather_coordinator(void)
 {
     if (!lcd_ui_is_initialized()) {
@@ -1724,6 +1840,9 @@ esp_err_t lcd_ui_start_weather_coordinator(void)
     return ESP_OK;
 }
 
+/*
+ * Render a generic UI callback.
+ */
 esp_err_t lcd_ui_render(lcd_ui_render_fn_t render_fn, void *user_ctx)
 {
     if (render_fn == NULL) {
@@ -1740,6 +1859,9 @@ esp_err_t lcd_ui_render(lcd_ui_render_fn_t render_fn, void *user_ctx)
     return ESP_OK;
 }
 
+/*
+ * Check if the LCD UI is initialized.
+ */
 bool lcd_ui_is_initialized(void)
 {
     if (s_ui_event_group == NULL) {
@@ -1748,6 +1870,9 @@ bool lcd_ui_is_initialized(void)
     return (xEventGroupGetBits(s_ui_event_group) & UI_READY_BIT) != 0;
 }
 
+/*
+ * Wait until the LCD UI is ready or the specified timeout elapses.
+ */
 esp_err_t lcd_ui_wait_until_ready(uint32_t timeout_ms)
 {
     if (lcd_ui_is_initialized()) {

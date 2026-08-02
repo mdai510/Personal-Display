@@ -19,10 +19,14 @@
 
 static const char *TAG = "wifi_call";
 static TaskHandle_t s_wifi_call_task_handle;
+// Event group to signal when the weather information is ready after a refresh cycle.
 static EventGroupHandle_t s_weather_event_group;
 static ip_api_info_t s_ip_info;
 static bool s_ip_info_ready = false;
 
+/*
+* Call the weather API once, fetching both the 24-hour and 7-day forecasts. This function assumes that the Wi-Fi station is already connected and that the IP geolocation info has been obtained.
+*/
 esp_err_t wifi_call_fetch_weather_once(void){
     if (!wifi_station_is_connected()) {
         return ESP_ERR_INVALID_STATE;
@@ -65,6 +69,9 @@ esp_err_t wifi_call_fetch_weather_once(void){
     return ret;
 }
 
+/*
+ * Refresh the weather information once. This function handles Wi-Fi connection, IP geolocation, and time synchronization before fetching the weather.
+ */
 static esp_err_t wifi_call_refresh_once(void)
 {
     if (s_weather_event_group != NULL) {
@@ -134,12 +141,17 @@ done:
     return ret;
 }
 
+/*
+ * Task that periodically refreshes the weather information.
+ * It waits for either a manual refresh request or the configured interval before performing the refresh.
+ */
 static void wifi_call_task(void *arg)
 {
     (void)arg;
     const TickType_t interval_ticks = pdMS_TO_TICKS(WIFI_CALL_INTERVAL_MS);
 
     while (1) {
+        // On startup, perform an immediate refresh.
         ESP_LOGI(TAG, "Starting weather refresh cycle");
         esp_err_t ret = wifi_call_refresh_once();
         if (ret != ESP_OK) {
@@ -148,6 +160,7 @@ static void wifi_call_task(void *arg)
             ESP_LOGI(TAG, "Weather cycle completed successfully");
         }
 
+        // Blocks until either the interval elapses or a manual refresh is requested.
         uint32_t notify_count = ulTaskNotifyTake(pdTRUE, interval_ticks);
         if (notify_count > 0) {
             ESP_LOGI(TAG, "Manual weather refresh requested");
@@ -155,6 +168,9 @@ static void wifi_call_task(void *arg)
     }
 }
 
+/*
+ * Start the Wi-Fi call service, creating the necessary task and event group if they do not already exist.
+ */
 esp_err_t wifi_call_start(void)
 {
     if (s_wifi_call_task_handle != NULL) {
@@ -186,6 +202,9 @@ esp_err_t wifi_call_start(void)
     return ESP_OK;
 }
 
+/*
+ * Check weather event group to see if weather info is ready.
+ */
 bool wifi_call_is_weather_ready(void)
 {
     if (s_weather_event_group == NULL) {
@@ -194,6 +213,9 @@ bool wifi_call_is_weather_ready(void)
     return (xEventGroupGetBits(s_weather_event_group) & WEATHER_READY_BIT) != 0;
 }
 
+/*
+ * Wait until the weather information is ready or the specified timeout elapses.
+ */
 esp_err_t wifi_call_wait_weather_ready(uint32_t timeout_ms)
 {
     if (s_weather_event_group == NULL) {
@@ -211,12 +233,16 @@ esp_err_t wifi_call_wait_weather_ready(uint32_t timeout_ms)
     return (bits & WEATHER_READY_BIT) ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
+/*
+ * Request a manual refresh of the weather information.
+ */
 esp_err_t wifi_call_request_refresh(void)
 {
     if (s_wifi_call_task_handle == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
 
+    // Notify wifi call task to perform a refresh immediately.
     xTaskNotifyGive(s_wifi_call_task_handle);
     return ESP_OK;
 }

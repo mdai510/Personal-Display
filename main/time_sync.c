@@ -11,6 +11,9 @@
 
 static const char *TAG = "time_sync";
 
+/*
+ * Build a POSIX timezone string from a UTC offset.
+ */
 static esp_err_t build_posix_tz_from_utc_offset(int32_t utc_offset_seconds, char *out, size_t out_len)
 {
     if (out == NULL || out_len < 16) {
@@ -45,6 +48,9 @@ static esp_err_t build_posix_tz_from_utc_offset(int32_t utc_offset_seconds, char
     return ESP_OK;
 }
 
+/*
+ * Pick an NTP server based on the timezone hint.
+ */
 static const char *pick_ntp_server_from_timezone(const char *timezone_hint){
     if (timezone_hint == NULL || timezone_hint[0] == '\0'){
         return "pool.ntp.org";
@@ -69,6 +75,9 @@ static const char *pick_ntp_server_from_timezone(const char *timezone_hint){
     return "pool.ntp.org";
 }
 
+/*
+ * Perform a one-time time synchronization using the given UTC offset and timezone hint.
+ */
 esp_err_t time_sync_once_with_utc_offset(int32_t utc_offset_seconds, const char *timezone_hint){
     char posix_tz[32] = {0};
     ESP_RETURN_ON_ERROR(build_posix_tz_from_utc_offset(utc_offset_seconds, posix_tz, sizeof(posix_tz)), TAG,

@@ -102,6 +102,9 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt){
 	return ESP_OK;
 }
 
+/*
+ * Perform an HTTP GET request.
+ */
 static esp_err_t perform_http_get(const char *url, http_response_buffer_t *response, int *status_code){
 	if (url == NULL || response == NULL || status_code == NULL) {
 		return ESP_ERR_INVALID_ARG;
@@ -198,6 +201,9 @@ esp_err_t call_ip_api_with_ipv6(const char *ipv6){
 	return ESP_FAIL;
 }
 
+/*
+ * Call the weather API for the next 24 hours.
+ */
 esp_err_t call_weather_api_24h(double latitude, double longitude, const char *timezone)
 {
 	const char *tz = (timezone && timezone[0]) ? timezone : "UTC";
@@ -234,6 +240,9 @@ esp_err_t call_weather_api_24h(double latitude, double longitude, const char *ti
 	return (status >= 200 && status < 300) ? err : ESP_FAIL;
 }
 
+/*
+ * Call the weather API for the next 7 days.
+ */
 esp_err_t call_weather_api_7d(double latitude, double longitude, const char *timezone)
 {
 	const char *tz = (timezone && timezone[0]) ? timezone : "UTC";

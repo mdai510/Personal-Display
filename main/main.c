@@ -14,6 +14,9 @@
 
 static const char *TAG = "display";
 
+/*
+* Main app entry point. Calls initialization functions for the LCD, UI, capacitive touch, and Wi-Fi call service.
+*/
 void app_main(void)
 {
     ESP_ERROR_CHECK(rgb_lcd_backlight_init());

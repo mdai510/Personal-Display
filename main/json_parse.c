@@ -10,6 +10,9 @@ static weather_forecast_t s_weather_forecast;
 static uint8_t has_weather_hourly_been_processed = 0;
 static uint8_t has_weather_daily_been_processed = 0;
 
+/*
+ * Replace the heap string with a new value.
+ */
 static void replace_heap_string(char **target, const char *value)
 {
     if (*target) {
@@ -21,6 +24,9 @@ static void replace_heap_string(char **target, const char *value)
     }
 }
 
+/*
+ * Get a 64-bit integer from a JSON array.
+ */
 static int64_t json_array_get_i64(cJSON *arr, size_t idx)
 {
     cJSON *item = cJSON_GetArrayItem(arr, (int)idx);
@@ -30,6 +36,9 @@ static int64_t json_array_get_i64(cJSON *arr, size_t idx)
     return 0;
 }
 
+/*
+ * Get a 32-bit integer from a JSON array.
+ */
 static int json_array_get_i32(cJSON *arr, size_t idx)
 {
     cJSON *item = cJSON_GetArrayItem(arr, (int)idx);
@@ -39,6 +48,9 @@ static int json_array_get_i32(cJSON *arr, size_t idx)
     return 0;
 }
 
+/*
+ * Get a 32-bit float from a JSON array.
+ */
 static float json_array_get_f32(cJSON *arr, size_t idx)
 {
     cJSON *item = cJSON_GetArrayItem(arr, (int)idx);
@@ -48,11 +60,17 @@ static float json_array_get_f32(cJSON *arr, size_t idx)
     return 0.0f;
 }
 
+/*
+ * Get smaller size
+ */
 static size_t min_size(size_t a, size_t b)
 {
     return (a < b) ? a : b;
 }
 
+/*
+* Parse json of IP API response
+*/
 esp_err_t process_ip_api_response(const char *response, size_t response_len){
     cJSON *root = cJSON_ParseWithLength(response, response_len);
     if (root == NULL) {
@@ -100,6 +118,9 @@ esp_err_t process_ip_api_response(const char *response, size_t response_len){
     return ESP_OK;
 }
 
+/*
+ * Get IP API info
+ */
 esp_err_t get_ip_api_info(ip_api_info_t *info){
     if (info == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -111,6 +132,9 @@ esp_err_t get_ip_api_info(ip_api_info_t *info){
     return ESP_OK;
 }
 
+/*
+ * Process the weather hourly response.
+ */
 esp_err_t process_weather_hourly_response(const char *response, size_t response_len)
 {
     cJSON *root = cJSON_ParseWithLength(response, response_len);
@@ -219,6 +243,9 @@ esp_err_t process_weather_hourly_response(const char *response, size_t response_
     return ESP_OK;
 }
 
+/*
+ * Process the weather daily response.
+ */
 esp_err_t process_weather_daily_response(const char *response, size_t response_len)
 {
     cJSON *root = cJSON_ParseWithLength(response, response_len);
@@ -288,6 +315,9 @@ esp_err_t process_weather_daily_response(const char *response, size_t response_l
     return ESP_OK;
 }
 
+/*
+ * Get the cached weather forecast.
+ */
 esp_err_t get_weather_forecast(weather_forecast_t *out)
 {
     if (out == NULL) {
