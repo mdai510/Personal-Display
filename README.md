@@ -12,3 +12,4 @@ Components:
 CrowPanel ESP32 HMI 7.0-inch Display  
 GT911 Capacitive Touch  
 PCA9557 I/O Expander  
+ESP-IDF
