@@ -16,29 +16,39 @@ ESP-IDF
 <img width="3120" height="1780" alt="image" src="https://github.com/user-attachments/assets/c58ea5af-f8f4-422f-a9ea-3d733a4589ab" />
 <img width="3214" height="1828" alt="image" src="https://github.com/user-attachments/assets/91cde4c9-111f-40d7-af85-a01e10f3410e" />
 
-Settings:
-set your wifi ssid and password in ESP-IDF configuration editor
-in main.c if you want more accurate location, set lat/lon and timezone
-#define CONFIG_DISPLAY_USE_SINGLE_FB 1
-#define CONFIG_DISPLAY_LCD_DATA_LINES_16 1
-#define CONFIG_DISPLAY_LCD_DATA_LINES 16
-#define CONFIG_DISPLAY_LCD_VSYNC_GPIO 40
-#define CONFIG_DISPLAY_LCD_HSYNC_GPIO 39
-#define CONFIG_DISPLAY_LCD_DE_GPIO 41
-#define CONFIG_DISPLAY_LCD_PCLK_GPIO 0
-#define CONFIG_DISPLAY_LCD_DATA0_GPIO 15
-#define CONFIG_DISPLAY_LCD_DATA1_GPIO 7
-#define CONFIG_DISPLAY_LCD_DATA2_GPIO 6
-#define CONFIG_DISPLAY_LCD_DATA3_GPIO 5
-#define CONFIG_DISPLAY_LCD_DATA4_GPIO 4
-#define CONFIG_DISPLAY_LCD_DATA5_GPIO 9
-#define CONFIG_DISPLAY_LCD_DATA6_GPIO 46
-#define CONFIG_DISPLAY_LCD_DATA7_GPIO 3
-#define CONFIG_DISPLAY_LCD_DATA8_GPIO 8
-#define CONFIG_DISPLAY_LCD_DATA9_GPIO 16
-#define CONFIG_DISPLAY_LCD_DATA10_GPIO 1
-#define CONFIG_DISPLAY_LCD_DATA11_GPIO 14
-#define CONFIG_DISPLAY_LCD_DATA12_GPIO 21
-#define CONFIG_DISPLAY_LCD_DATA13_GPIO 47
-#define CONFIG_DISPLAY_LCD_DATA14_GPIO 48
-#define CONFIG_DISPLAY_LCD_DATA15_GPIO 45
+Settings:  
+set your wifi ssid and password in ESP-IDF configuration editor  
+in main.c if you want more accurate location, set lat/lon and timezone  
+#define CONFIG_DISPLAY_USE_SINGLE_FB 1  
+#define CONFIG_DISPLAY_LCD_DATA_LINES_16 1  
+#define CONFIG_DISPLAY_LCD_DATA_LINES 16  
+#define CONFIG_DISPLAY_LCD_VSYNC_GPIO 40  
+#define CONFIG_DISPLAY_LCD_HSYNC_GPIO 39  
+#define CONFIG_DISPLAY_LCD_DE_GPIO 41  
+#define CONFIG_DISPLAY_LCD_PCLK_GPIO 0  
+#define CONFIG_DISPLAY_LCD_DATA0_GPIO 15  
+#define CONFIG_DISPLAY_LCD_DATA1_GPIO 7  
+#define CONFIG_DISPLAY_LCD_DATA2_GPIO 6  
+#define CONFIG_DISPLAY_LCD_DATA3_GPIO 5  
+#define CONFIG_DISPLAY_LCD_DATA4_GPIO 4  
+#define CONFIG_DISPLAY_LCD_DATA5_GPIO 9  
+#define CONFIG_DISPLAY_LCD_DATA6_GPIO 46  
+#define CONFIG_DISPLAY_LCD_DATA7_GPIO 3  
+#define CONFIG_DISPLAY_LCD_DATA8_GPIO 8  
+#define CONFIG_DISPLAY_LCD_DATA9_GPIO 16  
+#define CONFIG_DISPLAY_LCD_DATA10_GPIO 1  
+#define CONFIG_DISPLAY_LCD_DATA11_GPIO 14  
+#define CONFIG_DISPLAY_LCD_DATA12_GPIO 21  
+#define CONFIG_DISPLAY_LCD_DATA13_GPIO 47  
+#define CONFIG_DISPLAY_LCD_DATA14_GPIO 48  
+#define CONFIG_DISPLAY_LCD_DATA15_GPIO 45  
+
+Sources:
+https://www.elecrow.com/wiki/esp32-display-702727-intelligent-touch-screen-wi-fi26ble-800480-hmi-display.html  
+https://erikflowers.github.io/weather-icons/  
+https://docs.espressif.com  
+https://open-meteo.com/en/docs  
+https://ip-api.com  
+[pca9557.pdf](https://github.com/user-attachments/files/30683521/pca9557.pdf)  
+[GT911_registers.pdf](https://github.com/user-attachments/files/30683518/GT911_registers.pdf)  
+[GT911.pdf](https://github.com/user-attachments/files/30683515/GT911.pdf)  
