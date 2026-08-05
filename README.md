@@ -1,7 +1,7 @@
 Personal Display
 
 Features:  
-Relative location from IP-API (there is a setting to set coordinates manually, since ip location is very approximate; this is what i have done)
+Relative location from IP-API (there is a setting to set coordinates manually, since ip location is very approximate; this is what i have done)  
 Weather information from Open-Meteo  
 24-forecast  
 7-day forecast  
@@ -52,3 +52,9 @@ https://ip-api.com
 [pca9557.pdf](https://github.com/user-attachments/files/30683521/pca9557.pdf)  
 [GT911_registers.pdf](https://github.com/user-attachments/files/30683518/GT911_registers.pdf)  
 [GT911.pdf](https://github.com/user-attachments/files/30683515/GT911.pdf)  
+
+Potential Future Work:  
+Add FM/AM radio reciever, add ability to change bottom panel from hourly weather to radio tuner  
+Spotify integration, see what user is currently playing and ability to pause/skip  
+GNSS/GPS for more accurate location (compared to IP geolocation)
+Refactor code to reduce flash/RAM use so that I can actually implement these things lol   
