@@ -823,9 +823,10 @@ static lv_obj_t *create_hourly_forecast_cell(lv_obj_t *parent,
     lv_obj_set_height(cell, LV_PCT(100));
     lv_obj_set_style_bg_opa(cell, LV_OPA_TRANSP, 0);
     lv_obj_set_style_pad_all(cell, 0, 0);
-    lv_obj_set_style_pad_row(cell, 2, 0);
+    lv_obj_set_style_pad_top(cell, 1, 0);
+    lv_obj_set_style_pad_row(cell, 1, 0);
     lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     *hour_label_out = lv_label_create(cell);
     lv_obj_set_style_text_color(*hour_label_out, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
@@ -834,7 +835,7 @@ static lv_obj_t *create_hourly_forecast_cell(lv_obj_t *parent,
 
     *icon_label_out = lv_label_create(cell);
     lv_obj_set_style_text_color(*icon_label_out, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
-    lv_obj_set_style_text_font(*icon_label_out, &weather_icons_24, 0);
+    lv_obj_set_style_text_font(*icon_label_out, &weather_icons_48, 0);
     lv_obj_set_style_text_align(*icon_label_out, LV_TEXT_ALIGN_CENTER, 0);
 
     *hilo_label_out = lv_label_create(cell);
@@ -1599,7 +1600,7 @@ static void render_weather_current_ui(lv_display_t *disp)
 
             weather_icon_id_t hourly_icon = weather_code_to_icon_id(h->weather_code, h->is_day != 0);
             set_icon_temp_color(s_hourly_icon_labels[i], h->temperature_2m);
-            if (!set_label_to_icon_id(s_hourly_icon_labels[i], &weather_icons_24, hourly_icon)) {
+            if (!set_label_to_icon_id(s_hourly_icon_labels[i], &weather_icons_48, hourly_icon)) {
                 lv_obj_set_style_text_font(s_hourly_icon_labels[i], font_normal, 0);
                 lv_label_set_text(s_hourly_icon_labels[i], "?");
             }
