@@ -14,6 +14,14 @@
 
 static const char *TAG = "display";
 
+// Optional manual weather location override.
+// Set to 1 to bypass IP geolocation and use the location below.
+#define DISPLAY_USE_MANUAL_LOCATION 1
+#define DISPLAY_MANUAL_LATITUDE 37.5517
+#define DISPLAY_MANUAL_LONGITUDE -121.9519
+#define DISPLAY_MANUAL_TIMEZONE "America/Los_Angeles"
+#define DISPLAY_MANUAL_UTC_OFFSET_SECONDS (-7 * 3600)
+
 /*
 * Main app entry point. Calls initialization functions for the LCD, UI, capacitive touch, and Wi-Fi call service.
 */
@@ -59,6 +67,17 @@ void app_main(void)
                esp_err_to_name(ret));
       return;
     }
+
+#if DISPLAY_USE_MANUAL_LOCATION
+    ret = wifi_call_set_manual_location(DISPLAY_MANUAL_LATITUDE,
+                                        DISPLAY_MANUAL_LONGITUDE,
+                                        DISPLAY_MANUAL_TIMEZONE,
+                                        DISPLAY_MANUAL_UTC_OFFSET_SECONDS);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure manual location override: %s", esp_err_to_name(ret));
+        return;
+    }
+#endif
 
     ret = wifi_call_start();
     if (ret != ESP_OK) {

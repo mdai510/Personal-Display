@@ -8,12 +8,14 @@
 #include "json_parse.h"
 #include "time_sync.h"
 #include "wifi.h"
+#include <math.h>
 #include <string.h>
 
 #define WIFI_CALL_TASK_STACK_SIZE (6 * 1024)
 #define WIFI_CALL_TASK_PRIORITY 1
 #define WIFI_CALL_INTERVAL_MS (30 * 60 * 1000) //30 mins between each weather api call 
 #define WIFI_CALL_IPV6_WAIT_MS 15000
+#define WIFI_CALL_TZ_MAX_LEN 64
 
 #define WEATHER_READY_BIT BIT0
 
@@ -23,6 +25,18 @@ static TaskHandle_t s_wifi_call_task_handle;
 static EventGroupHandle_t s_weather_event_group;
 static ip_api_info_t s_ip_info;
 static bool s_ip_info_ready = false;
+
+typedef struct {
+    bool enabled;
+    double lat;
+    double lon;
+    char timezone[WIFI_CALL_TZ_MAX_LEN];
+    int32_t utc_offset_seconds;
+} manual_location_override_t;
+
+static manual_location_override_t s_manual_location_override = {
+    .enabled = false,
+};
 
 /*
 * Call the weather API once, fetching both the 24-hour and 7-day forecasts. This function assumes that the Wi-Fi station is already connected and that the IP geolocation info has been obtained.
@@ -90,35 +104,52 @@ static esp_err_t wifi_call_refresh_once(void)
         goto done;
     }
 
-    if (!s_ip_info_ready) {
-        ret = wifi_station_wait_for_ipv6(WIFI_CALL_IPV6_WAIT_MS);
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "IPv6 was not ready within timeout: %s", esp_err_to_name(ret));
-            goto done;
-        }
+    if (!s_ip_info_ready){
+        if (s_manual_location_override.enabled){
+            memset(&s_ip_info, 0, sizeof(s_ip_info));
+            s_ip_info.lat = s_manual_location_override.lat;
+            s_ip_info.lon = s_manual_location_override.lon;
+            s_ip_info.timezone = s_manual_location_override.timezone;
+            s_ip_info.utc_offset_seconds = s_manual_location_override.utc_offset_seconds;
+            s_ip_info_ready = true;
 
-        char ipv6[64] = {0};
-        ret = wifi_station_get_ipv6(ipv6, sizeof(ipv6));
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to read station IPv6: %s", esp_err_to_name(ret));
-            goto done;
-        }
+            ESP_LOGI(TAG,
+                     "Using manual location override lat=%.6f lon=%.6f tz=%s offset=%ld",
+                     s_ip_info.lat,
+                     s_ip_info.lon,
+                     s_ip_info.timezone,
+                     (long)s_ip_info.utc_offset_seconds);
+        } 
+        else{
+            ret = wifi_station_wait_for_ipv6(WIFI_CALL_IPV6_WAIT_MS);
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "IPv6 was not ready within timeout: %s", esp_err_to_name(ret));
+                goto done;
+            }
 
-        ESP_LOGI(TAG, "Calling ip-api with IPv6: %s", ipv6);
-        ret = call_ip_api_with_ipv6(ipv6);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "ip-api call failed: %s", esp_err_to_name(ret));
-            goto done;
-        }
+            char ipv6[64] = {0};
+            ret = wifi_station_get_ipv6(ipv6, sizeof(ipv6));
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to read station IPv6: %s", esp_err_to_name(ret));
+                goto done;
+            }
 
-        memset(&s_ip_info, 0, sizeof(s_ip_info));
-        ret = get_ip_api_info(&s_ip_info);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to get IP geolocation info from parsed response");
-            goto done;
-        }
+            ESP_LOGI(TAG, "Calling ip-api with IPv6: %s", ipv6);
+            ret = call_ip_api_with_ipv6(ipv6);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "ip-api call failed: %s", esp_err_to_name(ret));
+                goto done;
+            }
 
-        s_ip_info_ready = true;
+            memset(&s_ip_info, 0, sizeof(s_ip_info));
+            ret = get_ip_api_info(&s_ip_info);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to get IP geolocation info from parsed response");
+                goto done;
+            }
+
+            s_ip_info_ready = true;
+        }
 
         ESP_LOGI(TAG, "Sync time using UTC offset: %ld (timezone hint: %s)",
                  (long)s_ip_info.utc_offset_seconds,
@@ -244,5 +275,43 @@ esp_err_t wifi_call_request_refresh(void)
 
     // Notify wifi call task to perform a refresh immediately.
     xTaskNotifyGive(s_wifi_call_task_handle);
+    return ESP_OK;
+}
+
+esp_err_t wifi_call_set_manual_location(double latitude,
+                                        double longitude,
+                                        const char *timezone,
+                                        int32_t utc_offset_seconds)
+{
+    if (isnan(latitude) || isnan(longitude) || latitude < -90.0 || latitude > 90.0 ||
+        longitude < -180.0 || longitude > 180.0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (timezone == NULL || timezone[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    size_t tz_len = strnlen(timezone, WIFI_CALL_TZ_MAX_LEN);
+    if (tz_len == WIFI_CALL_TZ_MAX_LEN) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    s_manual_location_override.lat = latitude;
+    s_manual_location_override.lon = longitude;
+    s_manual_location_override.utc_offset_seconds = utc_offset_seconds;
+    memcpy(s_manual_location_override.timezone, timezone, tz_len + 1);
+    s_manual_location_override.enabled = true;
+
+    // Force a refresh cycle to rebuild location/time settings from this override.
+    s_ip_info_ready = false;
+
+    ESP_LOGI(TAG,
+             "Manual location override configured lat=%.6f lon=%.6f tz=%s offset=%ld",
+             latitude,
+             longitude,
+             s_manual_location_override.timezone,
+             (long)utc_offset_seconds);
+
     return ESP_OK;
 }
