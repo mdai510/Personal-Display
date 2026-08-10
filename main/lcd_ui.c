@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: CC0-1.0
  */
 
-#include <assert.h>
 #include <stdio.h>
 #include <time.h>
 #include <sys/lock.h>
@@ -1899,7 +1898,25 @@ esp_err_t lcd_ui_init(esp_lcd_panel_handle_t panel_handle)
     ESP_LOGI(TAG, "Allocate LVGL draw buffer");
     size_t draw_buffer_sz = DISPLAY_LCD_H_RES * DISPLAY_LVGL_DRAW_BUF_LINES * DISPLAY_PIXEL_SIZE;
     buf1 = esp_lcd_rgb_alloc_draw_buffer(panel_handle, draw_buffer_sz, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    assert(buf1);
+
+    if (buf1 == NULL) {
+        ESP_LOGW(TAG,
+                 "Internal RAM draw buffer allocation failed (%u bytes). Trying PSRAM fallback.",
+                 (unsigned)draw_buffer_sz);
+        buf1 = esp_lcd_rgb_alloc_draw_buffer(panel_handle,
+                                             draw_buffer_sz,
+                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+
+    if (buf1 == NULL) {
+        ESP_LOGE(TAG,
+                 "LVGL draw buffer allocation failed (%u bytes). free internal=%u free psram=%u",
+                 (unsigned)draw_buffer_sz,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        return ESP_ERR_NO_MEM;
+    }
+
     lv_display_set_buffers(s_display, buf1, NULL, draw_buffer_sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
 #endif
 

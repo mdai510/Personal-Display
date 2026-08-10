@@ -33,6 +33,7 @@ esp_netif_t *sta_netif = NULL;
 static esp_event_handler_instance_t ip_event_handler;
 static esp_event_handler_instance_t wifi_event_handler;
 static bool s_wifi_initialized = false;
+static bool s_wifi_shutting_down = false;
 
 static int s_retry_num = 0;
 
@@ -76,7 +77,11 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     }
   } 
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED){
-    if (s_retry_num < DISPLAY_WIFI_MAX_RETRY){
+    if (s_wifi_shutting_down) {
+      ESP_LOGI(TAG, "Wi-Fi disconnect during shutdown; skipping reconnect");
+      xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+    }
+    else if (s_retry_num < DISPLAY_WIFI_MAX_RETRY){
       esp_wifi_connect();
       s_retry_num++;
       ESP_LOGI(TAG, "retry to connect to the AP");
@@ -126,13 +131,6 @@ esp_err_t wifi_station_init(void){
     return ESP_ERR_INVALID_ARG;
   }
 
-    //Initialize Non-Volatile Storage (NVS)
-    esp_err_t ret = nvs_flash_init();
-    if(ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-
     if (s_wifi_event_group == NULL) {
       s_wifi_event_group = xEventGroupCreate();
       if (s_wifi_event_group == NULL) {
@@ -140,7 +138,7 @@ esp_err_t wifi_station_init(void){
       }
     }
 
-    ret = esp_netif_init();
+    esp_err_t ret = esp_netif_init();
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
       ESP_LOGE(TAG, "Failed to initialize TCP/IP network stack");
       return ret;
@@ -191,6 +189,7 @@ esp_err_t wifi_station_init(void){
 
     s_retry_num = 0;
     s_has_ipv6 = false;
+    s_wifi_shutting_down = false;
     memset(&s_ipv6_addr, 0, sizeof(s_ipv6_addr));
     xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_CONNECTED_IPV6_BIT);
     s_wifi_initialized = true;
@@ -250,6 +249,13 @@ esp_err_t wifi_station_deinit(void){
     return ESP_OK;
   }
 
+    s_wifi_shutting_down = true;
+
+    esp_err_t disc_ret = esp_wifi_disconnect();
+    if (disc_ret != ESP_OK && disc_ret != ESP_ERR_WIFI_NOT_INIT && disc_ret != ESP_ERR_WIFI_NOT_STARTED) {
+      ESP_LOGW(TAG, "Failed to disconnect Wi-Fi: %s", esp_err_to_name(disc_ret));
+    }
+
     esp_err_t ret = esp_wifi_stop();
     if (ret != ESP_OK && ret != ESP_ERR_WIFI_NOT_INIT && ret != ESP_ERR_WIFI_NOT_STARTED) {
       ESP_LOGW(TAG, "Failed to stop Wi-Fi: %s", esp_err_to_name(ret));
@@ -287,6 +293,7 @@ esp_err_t wifi_station_deinit(void){
     }
     s_retry_num = 0;
     s_has_ipv6 = false;
+    s_wifi_shutting_down = false;
     memset(&s_ipv6_addr, 0, sizeof(s_ipv6_addr));
     s_wifi_initialized = false;
 

@@ -8,9 +8,10 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "lcd_ui.h"
+#include "ble.h"
 #include "rgb_lcd_panel.h"
-#include "sdkconfig.h"
 #include "wifi_call.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "display";
 
@@ -27,6 +28,27 @@ static const char *TAG = "display";
 */
 void app_main(void)
 {
+    //Initialize Non-Volatile Storage (NVS)
+    esp_err_t ret = nvs_flash_init();
+    if(ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    ret = ble_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize BLE: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    ret = ble_start_advertising();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start BLE advertising: %s", esp_err_to_name(ret));
+        return;
+    }
+    ESP_LOGI(TAG, "BLE advertising started for bring-up test");
+  
     ESP_ERROR_CHECK(rgb_lcd_backlight_init());
     ESP_LOGI(TAG, "Initialize LCD backlight");
     ESP_LOGI(TAG, "Turn off LCD backlight");
@@ -43,7 +65,7 @@ void app_main(void)
     rgb_lcd_backlight_set(true);
 
     ESP_LOGI(TAG, "Initialize UI");
-    esp_err_t ret = lcd_ui_init(panel_handle);
+    ret = lcd_ui_init(panel_handle);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize UI: %s", esp_err_to_name(ret));
         return;
