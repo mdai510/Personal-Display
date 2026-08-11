@@ -12,6 +12,7 @@ typedef struct {
 	char password[65];
 	double latitude;
 	double longitude;
+	char loc_name[64];
 	char utc_offset[8];
 	int32_t utc_offset_seconds;
 } ble_provisioning_data_t;
@@ -29,8 +30,11 @@ esp_err_t ble_get_wifi_info(char *out_ssid,
 							size_t out_ssid_len,
 							char *out_password,
 							size_t out_password_len);
+uint32_t ble_get_wifi_info_version(void);
 esp_err_t ble_get_location_info(double *out_latitude,
 								double *out_longitude,
+								char *out_loc_name,
+								size_t out_loc_name_len,
 								char *out_utc_offset,
 								size_t out_utc_offset_len,
 								int32_t *out_utc_offset_seconds);

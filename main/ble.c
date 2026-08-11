@@ -38,8 +38,16 @@ static bool s_allow_wifi_write = false;
 static bool s_allow_location_write = false;
 
 #define PROV_MAX_PAYLOAD_LEN 384
+#define LOCATION_INFO_NAMESPACE "location_info"
+#define NVS_KEY_LATITUDE "lat"
+#define NVS_KEY_LONGITUDE "lon"
+#define NVS_KEY_LOCATION_NAME "loc_name"
+#define NVS_KEY_UTC_OFFSET "utc_offset"
+#define NVS_KEY_UTC_OFFSET_S "utc_off_s"
+
 static uint8_t provisioning_payload[PROV_MAX_PAYLOAD_LEN + 1] = {0};
 static uint16_t provisioning_payload_len = 0;
+static uint32_t s_wifi_info_version = 0;
 static uint32_t s_location_info_version = 0;
 static ble_provisioning_data_t provisioning_data = {
     .wifi_info_obtained = false,
@@ -49,6 +57,7 @@ static ble_provisioning_data_t provisioning_data = {
     .password = "",
     .latitude = 0.0,
     .longitude = 0.0,
+    .loc_name = "",
     .utc_offset = "",
     .utc_offset_seconds = 0,
 };
@@ -256,12 +265,15 @@ static bool parse_location_payload(const uint8_t *payload,
                                    size_t payload_len,
                                    double *out_lat,
                                    double *out_lon,
+                                   char *out_loc_name,
+                                   size_t out_loc_name_len,
                                    char *out_utc_offset,
                                    size_t out_utc_offset_len,
                                    int32_t *out_utc_offset_seconds){
     char json[PROV_MAX_PAYLOAD_LEN + 1];
 
-    if (payload == NULL || out_lat == NULL || out_lon == NULL || out_utc_offset == NULL ||
+    if (payload == NULL || out_lat == NULL || out_lon == NULL || out_loc_name == NULL ||
+        out_loc_name_len == 0 || out_utc_offset == NULL ||
         out_utc_offset_seconds == NULL || payload_len == 0 || payload_len > PROV_MAX_PAYLOAD_LEN) {
         return false;
     }
@@ -274,6 +286,12 @@ static bool parse_location_payload(const uint8_t *payload,
     }
 
     if (!copy_json_double_value(json, "lon", out_lon)) {
+        return false;
+    }
+
+    out_loc_name[0] = '\0';
+    if (find_json_key(json, "loc_name") != NULL &&
+        !copy_json_string_value(json, "loc_name", out_loc_name, out_loc_name_len)) {
         return false;
     }
 
@@ -345,27 +363,41 @@ static esp_err_t nvs_set_location(){
     esp_err_t err;
     nvs_handle_t nvs_handle;
 
-    err = nvs_open("location_info", NVS_READWRITE, &nvs_handle);
+    err = nvs_open(LOCATION_INFO_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open location NVS namespace: %s", esp_err_to_name(err));
         return err;
     }
 
-    err = nvs_set_blob(nvs_handle, "latitude", &provisioning_data.latitude, sizeof(provisioning_data.latitude));
+    err = nvs_set_blob(nvs_handle, NVS_KEY_LATITUDE, &provisioning_data.latitude, sizeof(provisioning_data.latitude));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set latitude in NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
 
-    err = nvs_set_blob(nvs_handle, "longitude", &provisioning_data.longitude, sizeof(provisioning_data.longitude));
+    err = nvs_set_blob(nvs_handle, NVS_KEY_LONGITUDE, &provisioning_data.longitude, sizeof(provisioning_data.longitude));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set longitude in NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
 
-    err = nvs_set_i32(nvs_handle, "utc_off_s", provisioning_data.utc_offset_seconds);
+    err = nvs_set_str(nvs_handle, NVS_KEY_LOCATION_NAME, provisioning_data.loc_name);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set location name in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_set_str(nvs_handle, NVS_KEY_UTC_OFFSET, provisioning_data.utc_offset);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set UTC offset in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_set_i32(nvs_handle, NVS_KEY_UTC_OFFSET_S, provisioning_data.utc_offset_seconds);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set UTC offset seconds in NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
@@ -488,6 +520,7 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
             }
 
             provisioning_data.wifi_info_obtained = true;
+            s_wifi_info_version++;
             ESP_LOGI(TAG, "Wi-Fi provisioning updated (ssid=%s)", provisioning_data.ssid);
         } else {
             esp_err_t nvs_err;
@@ -496,6 +529,8 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
                                         provisioning_payload_len,
                                         &provisioning_data.latitude,
                                         &provisioning_data.longitude,
+                                        provisioning_data.loc_name,
+                                        sizeof(provisioning_data.loc_name),
                                         provisioning_data.utc_offset,
                                         sizeof(provisioning_data.utc_offset),
                                         &provisioning_data.utc_offset_seconds)) {
@@ -515,9 +550,10 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
             provisioning_data.location_info_obtained = true;
             s_location_info_version++;
             ESP_LOGI(TAG,
-                     "Location provisioning updated: lat=%.6f lon=%.6f utc_offset=%s",
+                     "Location provisioning updated: lat=%.6f lon=%.6f loc_name=%s utc_offset=%s",
                      provisioning_data.latitude,
                      provisioning_data.longitude,
+                     provisioning_data.loc_name[0] != '\0' ? provisioning_data.loc_name : "<empty>",
                      provisioning_data.utc_offset);
         }
 
@@ -820,12 +856,19 @@ esp_err_t ble_get_wifi_info(char *out_ssid,
     return ESP_OK;
 }
 
+uint32_t ble_get_wifi_info_version(void){
+    return s_wifi_info_version;
+}
+
 esp_err_t ble_get_location_info(double *out_latitude,
                                 double *out_longitude,
+                                char *out_loc_name,
+                                size_t out_loc_name_len,
                                 char *out_utc_offset,
                                 size_t out_utc_offset_len,
                                 int32_t *out_utc_offset_seconds){
-    if (out_latitude == NULL || out_longitude == NULL || out_utc_offset == NULL ||
+    if (out_latitude == NULL || out_longitude == NULL || out_loc_name == NULL ||
+        out_loc_name_len == 0 || out_utc_offset == NULL ||
         out_utc_offset_seconds == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -838,13 +881,15 @@ esp_err_t ble_get_location_info(double *out_latitude,
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (strlen(provisioning_data.utc_offset) + 1 > out_utc_offset_len) {
+    if (strlen(provisioning_data.loc_name) + 1 > out_loc_name_len ||
+        strlen(provisioning_data.utc_offset) + 1 > out_utc_offset_len) {
         return ESP_ERR_INVALID_SIZE;
     }
 
     *out_latitude = provisioning_data.latitude;
     *out_longitude = provisioning_data.longitude;
     *out_utc_offset_seconds = provisioning_data.utc_offset_seconds;
+    memcpy(out_loc_name, provisioning_data.loc_name, strlen(provisioning_data.loc_name) + 1);
     memcpy(out_utc_offset, provisioning_data.utc_offset, strlen(provisioning_data.utc_offset) + 1);
     return ESP_OK;
 }

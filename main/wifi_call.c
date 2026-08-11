@@ -30,6 +30,7 @@ static const char *TAG = "wifi_call";
 #define NVS_KEY_PASSWORD "password"
 #define NVS_KEY_LATITUDE "lat"
 #define NVS_KEY_LONGITUDE "lon"
+#define NVS_KEY_LOCATION_NAME "loc_name"
 #define NVS_KEY_UTC_OFFSET "utc_offset"
 #define NVS_KEY_UTC_OFFSET_S "utc_off_s"
 
@@ -41,6 +42,7 @@ static const char *TAG = "wifi_call";
 typedef struct {
     double latitude;
     double longitude;
+    char loc_name[64];
     char utc_offset[64];
     int32_t utc_offset_seconds;
 } location_data_t;
@@ -55,7 +57,11 @@ static esp_err_t wifi_call_load_wifi_from_nvs(char *ssid, size_t ssid_len, char 
 static esp_err_t wifi_call_load_location_from_nvs(location_data_t *out_location);
 static esp_err_t wifi_call_get_connect_credentials(char *ssid, size_t ssid_len, char *password, size_t password_len);
 static esp_err_t wifi_call_connect_with_retries(void);
-static esp_err_t wifi_call_wait_for_wifi_payload(char *ssid, size_t ssid_len, char *password, size_t password_len);
+static esp_err_t wifi_call_wait_for_wifi_payload_since(char *ssid,
+                                                       size_t ssid_len,
+                                                       char *password,
+                                                       size_t password_len,
+                                                       uint32_t min_version);
 static esp_err_t wifi_call_wait_for_location_payload(location_data_t *out_location);
 static esp_err_t wifi_call_wait_for_location_payload_since(location_data_t *out_location,
                                                            uint32_t min_version,
@@ -108,6 +114,7 @@ esp_err_t wifi_call_set_manual_location(double latitude,
 
     s_manual_location.latitude = latitude;
     s_manual_location.longitude = longitude;
+    s_manual_location.loc_name[0] = '\0';
     s_manual_location.utc_offset_seconds = utc_offset_seconds;
     memcpy(s_manual_location.utc_offset, timezone, strlen(timezone) + 1);
     s_manual_location_set = true;
@@ -205,6 +212,7 @@ static esp_err_t wifi_call_load_wifi_from_nvs(char *ssid, size_t ssid_len, char 
 static esp_err_t wifi_call_load_location_from_nvs(location_data_t *out_location) {
     nvs_handle_t nvs_handle;
     esp_err_t err;
+    size_t loc_name_len = sizeof(out_location->loc_name);
     size_t utc_len = sizeof(out_location->utc_offset);
 
     if (out_location == NULL) {
@@ -224,6 +232,14 @@ static esp_err_t wifi_call_load_location_from_nvs(location_data_t *out_location)
 
     err = nvs_get_blob(nvs_handle, NVS_KEY_LONGITUDE, &out_location->longitude, &(size_t){sizeof(out_location->longitude)});
     if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_get_str(nvs_handle, NVS_KEY_LOCATION_NAME, out_location->loc_name, &loc_name_len);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        out_location->loc_name[0] = '\0';
+    } else if (err != ESP_OK) {
         nvs_close(nvs_handle);
         return err;
     }
@@ -331,13 +347,24 @@ static esp_err_t wifi_call_connect_with_retries(void) {
     return ESP_FAIL;
 }
 
-static esp_err_t wifi_call_wait_for_wifi_payload(char *ssid, size_t ssid_len, char *password, size_t password_len) {
+static esp_err_t wifi_call_wait_for_wifi_payload_since(char *ssid,
+                                                       size_t ssid_len,
+                                                       char *password,
+                                                       size_t password_len,
+                                                       uint32_t min_version) {
     esp_err_t err;
 
     (void)ble_set_write_permissions(true, false);
     wifi_call_show_ble_message("Wi-Fi failed\nSend SSID/password over BLE", false);
 
     for (;;) {
+        uint32_t current_version = ble_get_wifi_info_version();
+
+        if (current_version <= min_version) {
+            vTaskDelay(pdMS_TO_TICKS(BLE_POLL_DELAY_MS));
+            continue;
+        }
+
         err = ble_get_wifi_info(ssid, ssid_len, password, password_len);
         if (err == ESP_OK) {
             char msg[96];
@@ -387,6 +414,8 @@ static esp_err_t wifi_call_wait_for_location_payload_since(location_data_t *out_
 
         err = ble_get_location_info(&out_location->latitude,
                                     &out_location->longitude,
+                                    out_location->loc_name,
+                                    sizeof(out_location->loc_name),
                                     out_location->utc_offset,
                                     sizeof(out_location->utc_offset),
                                     &out_location->utc_offset_seconds);
@@ -413,6 +442,9 @@ static esp_err_t wifi_call_fetch_and_show_weather(void) {
         }
 
         err = wifi_call_fetch_weather_from_location(&s_manual_location);
+        if (err == ESP_OK) {
+            (void)lcd_ui_set_location_name(s_manual_location.loc_name);
+        }
         return err;
     }
 
@@ -425,6 +457,9 @@ static esp_err_t wifi_call_fetch_and_show_weather(void) {
         }
 
         err = wifi_call_fetch_weather_from_location(&location);
+        if (err == ESP_OK) {
+            (void)lcd_ui_set_location_name(location.loc_name);
+        }
         return err;
     }
 
@@ -440,8 +475,13 @@ static esp_err_t wifi_call_run_onboarding(void) {
     for (;;) {
         err = wifi_call_connect_with_retries();
         if (err != ESP_OK) {
+            uint32_t start_version = ble_get_wifi_info_version();
             wifi_call_show_ble_message("Wi-Fi failed\nWaiting for BLE update", false);
-            err = wifi_call_wait_for_wifi_payload(ssid, sizeof(ssid), password, sizeof(password));
+            err = wifi_call_wait_for_wifi_payload_since(ssid,
+                                                        sizeof(ssid),
+                                                        password,
+                                                        sizeof(password),
+                                                        start_version);
             if (err != ESP_OK) {
                 continue;
             }
@@ -476,6 +516,8 @@ static esp_err_t wifi_call_run_onboarding(void) {
             wifi_call_show_ble_message("Time sync failed\nRetry location via BLE", false);
             continue;
         }
+
+        (void)lcd_ui_set_location_name(location.loc_name);
 
         err = ESP_OK;
         if (err == ESP_OK) {
@@ -542,6 +584,7 @@ static void wifi_call_task(void *arg) {
                         continue;
                     }
 
+                    (void)lcd_ui_set_location_name(location.loc_name);
                     xEventGroupSetBits(s_wifi_call_event_group, WIFI_CALL_EVENT_WEATHER_READY);
                     (void)ble_stop_advertising();
                     continue;

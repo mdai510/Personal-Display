@@ -214,6 +214,7 @@ static weather_daily_view_t s_weather_daily_view = WEATHER_DAILY_VIEW_TODAY;
 static lv_obj_t *s_starting_label = NULL;
 static lv_obj_t *s_date_label = NULL;
 static lv_obj_t *s_time_label = NULL;
+static lv_obj_t *s_location_name_label = NULL;
 static lv_obj_t *s_last_refreshed_label = NULL;
 static lv_obj_t *s_refresh_icon_label = NULL;
 static lv_obj_t *s_change_location_button_label = NULL;
@@ -259,6 +260,7 @@ static bool s_last_weather_refresh_valid = false;
 static bool s_weather_refresh_in_progress = false;
 static int s_hourly_forecast_page = 0;
 static char s_message_text[160] = "starting...";
+static char s_location_name_text[64] = "";
 static bool s_message_show_close_button = false;
 static lv_obj_t *s_message_close_label = NULL;
 
@@ -293,6 +295,7 @@ static size_t get_hourly_display_start_index(const weather_forecast_t *forecast)
 static lv_color_t weather_icon_color_from_temp_f(float temp_f);
 static void set_icon_temp_color(lv_obj_t *label, float temp_f);
 static const char *weather_code_to_interpretation(int code);
+static void update_location_name_label(void);
 static void update_last_refreshed_label(void);
 static void render_message_ui(lv_display_t *disp);
 static void render_message_ui_cb(lv_display_t *disp, void *user_ctx);
@@ -1117,6 +1120,23 @@ static void update_time_label(void)
 }
 
 /*
+ * Update the location name label.
+ */
+static void update_location_name_label(void)
+{
+    if (s_location_name_label == NULL) {
+        return;
+    }
+
+    if (s_location_name_text[0] == '\0') {
+        lv_label_set_text(s_location_name_label, "");
+        return;
+    }
+
+    lv_label_set_text(s_location_name_label, s_location_name_text);
+}
+
+/*
  * Update the last refreshed label.
  */
 static void update_last_refreshed_label(void)
@@ -1212,22 +1232,17 @@ static bool handle_change_location_touch(const touch_event_t *event)
         return false;
     }
 
-    bool on_change_location = point_in_rect(event->x,
-                                            event->y,
-                                            PANEL_X1(s_weather_action_panel),
-                                            PANEL_Y1(s_weather_action_panel),
-                                            PANEL_X2(s_weather_action_panel),
-                                            PANEL_Y2(s_weather_action_panel));
+    bool on_change_location = false;
 
     if (s_change_location_button_label != NULL) {
         lv_area_t label_area;
         lv_obj_get_coords(s_change_location_button_label, &label_area);
-        on_change_location = on_change_location || point_in_rect(event->x,
-                                                                 event->y,
-                                                                 label_area.x1 - 20,
-                                                                 label_area.y1 - 10,
-                                                                 label_area.x2 + 20,
-                                                                 label_area.y2 + 10);
+        on_change_location = point_in_rect(event->x,
+                                           event->y,
+                                           label_area.x1 - 20,
+                                           label_area.y1 - 10,
+                                           label_area.x2 + 20,
+                                           label_area.y2 + 10);
     }
 
     if (!on_change_location) {
@@ -1313,10 +1328,13 @@ static void render_time_band_ui(lv_display_t *disp)
         lv_obj_set_style_text_font(s_date_label, font_normal, 0);
         lv_obj_align(s_date_label, LV_ALIGN_LEFT_MID, 0, 0);
 
-        s_last_refreshed_label = lv_label_create(s_time_band_panel.root);
-        lv_obj_set_style_text_color(s_last_refreshed_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
-        lv_obj_set_style_text_font(s_last_refreshed_label, font_normal, 0);
-        lv_obj_align(s_last_refreshed_label, LV_ALIGN_CENTER, 0, 0);
+        s_location_name_label = lv_label_create(s_time_band_panel.root);
+        lv_obj_set_style_text_color(s_location_name_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
+        lv_obj_set_style_text_font(s_location_name_label, font_normal, 0);
+        lv_obj_set_width(s_location_name_label, (DISPLAY_LCD_H_RES > 220) ? (DISPLAY_LCD_H_RES - 220) : (DISPLAY_LCD_H_RES / 3));
+        lv_obj_set_style_text_align(s_location_name_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_long_mode(s_location_name_label, LV_LABEL_LONG_DOT);
+        lv_obj_align(s_location_name_label, LV_ALIGN_CENTER, 0, 0);
 
         s_time_label = lv_label_create(s_time_band_panel.root);
         lv_obj_set_style_text_color(s_time_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
@@ -1335,6 +1353,7 @@ static void render_time_band_ui(lv_display_t *disp)
     ui_panel_show(&s_time_band_panel);
 
     update_time_label();
+    update_location_name_label();
     update_last_refreshed_label();
 
     if (s_time_timer == NULL) {
@@ -1538,8 +1557,18 @@ static void render_weather_current_ui(lv_display_t *disp)
         s_change_location_button_label = lv_label_create(s_weather_action_panel.root);
         lv_obj_set_style_text_color(s_change_location_button_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
         lv_obj_set_style_text_font(s_change_location_button_label, font_normal, 0);
+        lv_obj_set_width(s_change_location_button_label, (DISPLAY_LCD_H_RES / 2) - 20);
+        lv_obj_set_style_text_align(s_change_location_button_label, LV_TEXT_ALIGN_LEFT, 0);
         lv_label_set_text(s_change_location_button_label, "Change Location");
-        lv_obj_center(s_change_location_button_label);
+        lv_obj_align(s_change_location_button_label, LV_ALIGN_LEFT_MID, 10, 0);
+
+        s_last_refreshed_label = lv_label_create(s_weather_action_panel.root);
+        lv_obj_set_style_text_color(s_last_refreshed_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
+        lv_obj_set_style_text_font(s_last_refreshed_label, font_normal, 0);
+        lv_obj_set_width(s_last_refreshed_label, (DISPLAY_LCD_H_RES / 2) - 20);
+        lv_obj_set_style_text_align(s_last_refreshed_label, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_label_set_long_mode(s_last_refreshed_label, LV_LABEL_LONG_DOT);
+        lv_obj_align(s_last_refreshed_label, LV_ALIGN_RIGHT_MID, -10, 0);
 
         s_weather_hilo_label = lv_label_create(s_weather_right_col);
         lv_obj_set_style_text_color(s_weather_hilo_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
@@ -1622,6 +1651,7 @@ static void render_weather_current_ui(lv_display_t *disp)
     ui_panel_show(&s_weather_forecast_panel);
     ui_panel_show(&s_weather_forecast_toggle_panel);
     set_weather_daily_view(s_weather_daily_view);
+    update_last_refreshed_label();
 
     char value_buf[48];
 
@@ -2153,6 +2183,16 @@ esp_err_t lcd_ui_show_weather_current(void)
 esp_err_t lcd_ui_show_starting(void)
 {
     return lcd_ui_render(render_starting_ui_cb, NULL);
+}
+
+esp_err_t lcd_ui_set_location_name(const char *location_name)
+{
+    if (location_name == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    snprintf(s_location_name_text, sizeof(s_location_name_text), "%s", location_name);
+    return ESP_OK;
 }
 
 esp_err_t lcd_ui_show_message_screen(const char *message)

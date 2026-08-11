@@ -11,6 +11,7 @@
 #include "ble.h"
 #include "rgb_lcd_panel.h"
 #include "wifi_call.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 
 static const char *TAG = "display";
@@ -18,9 +19,10 @@ static const char *TAG = "display";
 // Optional manual weather location override.
 // Set to 1 to bypass BLE location setting and use the location below.
 // Set to 0 to use BLE location setting.
-#define DISPLAY_USE_MANUAL_LOCATION 1
+#define DISPLAY_USE_MANUAL_LOCATION 0
 #define DISPLAY_MANUAL_LATITUDE 37.5517
 #define DISPLAY_MANUAL_LONGITUDE -121.9519
+#define DISPLAY_MANUAL_LOCATION "Fremont, CA"
 #define DISPLAY_MANUAL_TIMEZONE "America/Los_Angeles"
 #define DISPLAY_MANUAL_UTC_OFFSET_SECONDS (-7 * 3600)
 
@@ -28,6 +30,36 @@ static const char *TAG = "display";
 // For manual setting of SSID and password, go to sdkconfig.h and change
 // CONFIG_DISPLAY_WIFI_STA_SSID 
 // CONFIG_DISPLAY_WIFI_STA_PASSWORD
+
+// Test-only: force bad Wi-Fi credentials into NVS to validate startup failure/recovery flow.
+#define WRITE_BAD_WIFI_NVS_ON_BOOT 0
+
+static esp_err_t write_bad_wifi_credentials_to_nvs(void)
+{
+    nvs_handle_t nvs_handle;
+    esp_err_t err;
+
+    err = nvs_open("wifi_info", NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = nvs_set_str(nvs_handle, "ssid", "bad_startup_ssid");
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_set_str(nvs_handle, "password", "bad_startup_password");
+    if (err != ESP_OK) {
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_commit(nvs_handle);
+    nvs_close(nvs_handle);
+    return err;
+}
 
 /*
 * Main app entry point. Calls initialization functions for the LCD, UI, capacitive touch, and Wi-Fi call service.
@@ -41,6 +73,15 @@ void app_main(void)
       ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+#if WRITE_BAD_WIFI_NVS_ON_BOOT
+    ret = write_bad_wifi_credentials_to_nvs();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write bad test Wi-Fi NVS values: %s", esp_err_to_name(ret));
+        return;
+    }
+    ESP_LOGW(TAG, "Wrote bad test Wi-Fi credentials to NVS for startup behavior testing");
+#endif
 
     ret = ble_init();
     if (ret != ESP_OK) {

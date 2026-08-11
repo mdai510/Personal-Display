@@ -36,6 +36,9 @@ static bool s_wifi_shutting_down = false;
 
 static int s_retry_num = 0;
 
+// Keep failure detection fast so onboarding can promptly return to BLE Wi-Fi request.
+#define WIFI_CONNECT_RETRY_LIMIT 3
+
 /*
 * Event handler for Wi-Fi and IP events.
 */
@@ -46,11 +49,16 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED){
   }
   else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED){
+    int retry_limit = DISPLAY_WIFI_MAX_RETRY;
+    if (retry_limit > WIFI_CONNECT_RETRY_LIMIT) {
+      retry_limit = WIFI_CONNECT_RETRY_LIMIT;
+    }
+
     if (s_wifi_shutting_down) {
       ESP_LOGI(TAG, "Wi-Fi disconnect during shutdown; skipping reconnect");
       xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
     }
-    else if (s_retry_num < DISPLAY_WIFI_MAX_RETRY){
+    else if (s_retry_num < retry_limit){
       esp_wifi_connect();
       s_retry_num++;
       ESP_LOGI(TAG, "retry to connect to the AP");
