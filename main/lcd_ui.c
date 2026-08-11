@@ -9,6 +9,7 @@
 #include <sys/lock.h>
 #include <sys/param.h>
 #include "freertos/idf_additions.h"
+#include "portmacro.h"
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -69,6 +70,9 @@ static const char *TAG = "lcd_ui";
 #define WEATHER_RIGHT_AVAILABLE_W (DISPLAY_LCD_H_RES - WEATHER_LEFT_PANEL_W)
 #define WEATHER_TOGGLE_PANEL_ACTUAL_W ((WEATHER_RIGHT_AVAILABLE_W <= FORECAST_TOGGLE_PANEL_W + 1) ? 1 : FORECAST_TOGGLE_PANEL_W)
 #define WEATHER_FORECAST_PANEL_W (WEATHER_RIGHT_AVAILABLE_W - WEATHER_TOGGLE_PANEL_ACTUAL_W)
+
+#define MINS_WITHOUT_TOUCH_TO_SLEEP 90
+#define TICKS_WITHOUT_TOUCH_TO_SLEEP pdMS_TO_TICKS(MINS_WITHOUT_TOUCH_TO_SLEEP * 60 * 1000)
 
 #define PANEL_X1(panel) ((panel).x)
 #define PANEL_Y1(panel) ((panel).y)
@@ -263,6 +267,9 @@ static char s_message_text[160] = "starting...";
 static char s_location_name_text[64] = "";
 static bool s_message_show_close_button = false;
 static lv_obj_t *s_message_close_label = NULL;
+
+static TickType_t last_touch_ticks = 0;
+static bool s_is_display_sleeping = false;
 
 static bool weather_icon_font_has_glyph(const lv_font_t *font, uint32_t codepoint);
 static uint32_t weather_icon_get_codepoint(const lv_font_t *font, weather_icon_id_t icon_id);
@@ -2035,29 +2042,44 @@ static void lvgl_port_task(void *arg)
             wait_ticks = 1;
         }
 
+        //check for touch events and handle them
+        //if no touch events for a certain period, put display to sleep
+        if(!s_is_display_sleeping && xTaskGetTickCount() - last_touch_ticks > TICKS_WITHOUT_TOUCH_TO_SLEEP){
+            //put display to sleep
+            s_is_display_sleeping = true;
+            ESP_LOGI(TAG, "No touch events for a while, putting display to sleep");
+            rgb_lcd_backlight_set(false);
+        }
         QueueHandle_t touch_queue = cap_touch_get_event_queue();
         if (touch_queue != NULL && xQueueReceive(touch_queue, &touch_event_data, wait_ticks) == pdTRUE) {
-            ESP_LOGI(TAG, "Touch event received: type=%d, x=%d, y=%d", touch_event_data.touch_type, touch_event_data.x, touch_event_data.y);
-            if (handle_message_screen_close_touch(&touch_event_data)) {
-                continue;
-            }
-            if (handle_time_band_refresh_touch(&touch_event_data)) {
-                continue;
-            }
-            if (handle_change_location_touch(&touch_event_data)) {
-                continue;
-            }
-            if (handle_hourly_forecast_touch(&touch_event_data)) {
-                _lock_acquire(&s_lvgl_api_lock);
-                render_weather_current_ui(s_display);
-                _lock_release(&s_lvgl_api_lock);
-                continue;
-            }
-            if (handle_daily_view_touch(&touch_event_data)) {
-                _lock_acquire(&s_lvgl_api_lock);
-                render_weather_current_ui(s_display);
-                _lock_release(&s_lvgl_api_lock);
-                continue;
+            last_touch_ticks = xTaskGetTickCount();
+            if (s_is_display_sleeping) {
+                s_is_display_sleeping = false;
+                ESP_LOGI(TAG, "Touch event received, waking up display");
+                rgb_lcd_backlight_set(true);
+            } else {
+                ESP_LOGI(TAG, "Touch event received: type=%d, x=%d, y=%d", touch_event_data.touch_type, touch_event_data.x, touch_event_data.y);
+                if (handle_message_screen_close_touch(&touch_event_data)) {
+                  continue;
+                }
+                if (handle_time_band_refresh_touch(&touch_event_data)) {
+                  continue;
+                }
+                if (handle_change_location_touch(&touch_event_data)) {
+                  continue;
+                }
+                if (handle_hourly_forecast_touch(&touch_event_data)) {
+                  _lock_acquire(&s_lvgl_api_lock);
+                  render_weather_current_ui(s_display);
+                  _lock_release(&s_lvgl_api_lock);
+                  continue;
+                }
+                if (handle_daily_view_touch(&touch_event_data)) {
+                  _lock_acquire(&s_lvgl_api_lock);
+                  render_weather_current_ui(s_display);
+                  _lock_release(&s_lvgl_api_lock);
+                  continue;
+                }
             }
         } else if (touch_queue == NULL) {
             vTaskDelay(wait_ticks);
@@ -2191,7 +2213,15 @@ esp_err_t lcd_ui_set_location_name(const char *location_name)
         return ESP_ERR_INVALID_ARG;
     }
 
+    if (!lcd_ui_is_initialized()) {
+        snprintf(s_location_name_text, sizeof(s_location_name_text), "%s", location_name);
+        return ESP_OK;
+    }
+
+    _lock_acquire(&s_lvgl_api_lock);
     snprintf(s_location_name_text, sizeof(s_location_name_text), "%s", location_name);
+    update_location_name_label();
+    _lock_release(&s_lvgl_api_lock);
     return ESP_OK;
 }
 
