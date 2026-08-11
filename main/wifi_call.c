@@ -355,7 +355,7 @@ static esp_err_t wifi_call_wait_for_wifi_payload_since(char *ssid,
     esp_err_t err;
 
     (void)ble_set_write_permissions(true, false);
-    wifi_call_show_ble_message("Wi-Fi failed\nSend SSID/password over BLE", false);
+    wifi_call_show_ble_message("Wi-Fi failed\nSend SSID/password over Bluetooth", false);
 
     for (;;) {
         uint32_t current_version = ble_get_wifi_info_version();
@@ -392,7 +392,7 @@ static esp_err_t wifi_call_wait_for_location_payload_since(location_data_t *out_
     }
 
     (void)ble_set_write_permissions(false, true);
-    wifi_call_show_ble_message("Need location\nSend lat/lon/UTC over BLE", allow_cancel);
+    wifi_call_show_ble_message("Need location\nSend location information over Bluetooth", allow_cancel);
 
     for (;;) {
         uint32_t current_version;
@@ -499,7 +499,7 @@ static esp_err_t wifi_call_run_onboarding(void) {
             return ESP_OK;
         }
 
-        wifi_call_show_ble_message("Weather fetch failed\nNeed location via BLE", false);
+        wifi_call_show_ble_message("Weather fetch failed\nNeed location via Bluetooth", false);
         err = wifi_call_wait_for_location_payload(&location);
         if (err != ESP_OK) {
             continue;
@@ -507,13 +507,13 @@ static esp_err_t wifi_call_run_onboarding(void) {
 
         err = wifi_call_fetch_weather_from_location(&location);
         if (err != ESP_OK) {
-            lcd_ui_show_message_screen("Invalid location\nSend again via BLE");
+            lcd_ui_show_message_screen("Invalid location\nSend again via Bluetooth");
             continue;
         }
 
         err = time_sync_once_with_utc_offset(location.utc_offset_seconds, location.utc_offset);
         if (err != ESP_OK) {
-            wifi_call_show_ble_message("Time sync failed\nRetry location via BLE", false);
+            wifi_call_show_ble_message("Time sync failed\nRetry location via Bluetooth", false);
             continue;
         }
 
@@ -528,7 +528,7 @@ static esp_err_t wifi_call_run_onboarding(void) {
             return ESP_OK;
         }
 
-        wifi_call_show_ble_message("Weather still failing\nRetry location via BLE", false);
+        wifi_call_show_ble_message("Weather still failing\nRetry location via Bluetooth", false);
     }
 }
 
@@ -558,7 +558,7 @@ static void wifi_call_task(void *arg) {
                     uint32_t start_version = ble_get_location_info_version();
                     xEventGroupClearBits(s_wifi_call_event_group, WIFI_CALL_EVENT_LOCATION_CHANGE_CANCEL);
 
-                    wifi_call_show_ble_message("Location change requested\nSend new location via BLE", true);
+                    wifi_call_show_ble_message("Location change requested\nSend new location via Bluetooth", true);
                     ble_start_advertising();
 
                     err = wifi_call_wait_for_location_payload_since(&location, start_version, true);
@@ -575,7 +575,7 @@ static void wifi_call_task(void *arg) {
                     }
 
                     if (wifi_call_fetch_weather_from_location(&location) != ESP_OK) {
-                        lcd_ui_show_message_screen("Invalid location\nSend again via BLE");
+                        lcd_ui_show_message_screen("Invalid location\nSend again via Bluetooth");
                         continue;
                     }
 
