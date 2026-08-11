@@ -1,12 +1,13 @@
 Personal Weather Display
 
 Features:  
-Location/Wi-Fi setting through Bluetooth LE connection (or manual setting if wanted)  
-Non-Volatile Storage saving Wi-Fi and location configuration  
-24-hour forecast  
-7-day forecast  
+User can change location/Wi-Fi config through Bluetooth LE connection (or manual setting if wanted)  
+Non-Volatile Storage saves location and Wi-Fi config  
+Main display shows current weather, 24-hour forecast, and 7-day forecast  
 Swipe/Touch buttons to change display  
 Manual refresh button to call weather API  
+Auto-refresh of weather data every 30 mins  
+Wi-Fi station and BLE GAP Advertising / GATT server only on during operation (API calls or Wi-Fi/location config)  
   
 Components:  
 CrowPanel ESP32 HMI 7.0-inch Display (ESP32-S3)  
