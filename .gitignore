@@ -2,7 +2,6 @@
 build/
 
 # Generated local config from menuconfig
-sdkconfig
 sdkconfig.old
 
 # Local tooling/editor caches
