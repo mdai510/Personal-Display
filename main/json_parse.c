@@ -4,25 +4,9 @@
 #include "esp_err.h"
 #include "cJSON.h"
 
-static uint8_t has_ip_api_been_processed = 0;
-static ip_api_info_t s_ip_api_info;
 static weather_forecast_t s_weather_forecast;
 static uint8_t has_weather_hourly_been_processed = 0;
 static uint8_t has_weather_daily_been_processed = 0;
-
-/*
- * Replace the heap string with a new value.
- */
-static void replace_heap_string(char **target, const char *value)
-{
-    if (*target) {
-        free(*target);
-        *target = NULL;
-    }
-    if (value) {
-        *target = strdup(value);
-    }
-}
 
 /*
  * Get a 64-bit integer from a JSON array.
@@ -66,70 +50,6 @@ static float json_array_get_f32(cJSON *arr, size_t idx)
 static size_t min_size(size_t a, size_t b)
 {
     return (a < b) ? a : b;
-}
-
-/*
-* Parse json of IP API response
-*/
-esp_err_t process_ip_api_response(const char *response, size_t response_len){
-    cJSON *root = cJSON_ParseWithLength(response, response_len);
-    if (root == NULL) {
-        return ESP_FAIL;
-    }
-    
-    cJSON *status = cJSON_GetObjectItem(root, "status");
-    if (status == NULL || cJSON_IsString(status) == 0 || strcmp(status->valuestring, "success") != 0) {
-        cJSON_Delete(root);
-        return ESP_FAIL;
-    }
-
-    cJSON *country = cJSON_GetObjectItemCaseSensitive(root, "country");
-    if(cJSON_IsString(country) && (country->valuestring != NULL)) {
-        replace_heap_string(&s_ip_api_info.country, country->valuestring);
-    }
-    cJSON *regionName = cJSON_GetObjectItem(root, "regionName");
-    if(cJSON_IsString(regionName) && (regionName->valuestring != NULL)) {
-        replace_heap_string(&s_ip_api_info.regionName, regionName->valuestring);
-    }
-    cJSON *city = cJSON_GetObjectItem(root, "city");
-    if(cJSON_IsString(city) && (city->valuestring != NULL)) {
-        replace_heap_string(&s_ip_api_info.city, city->valuestring);
-    }
-    cJSON *lat = cJSON_GetObjectItem(root, "lat");
-    if(cJSON_IsNumber(lat)) {
-        s_ip_api_info.lat = lat->valuedouble;
-    }
-    cJSON *lon = cJSON_GetObjectItem(root, "lon");
-    if(cJSON_IsNumber(lon)) {
-        s_ip_api_info.lon = lon->valuedouble;
-    }
-    cJSON *timezone = cJSON_GetObjectItem(root, "timezone");
-    if(cJSON_IsString(timezone) && (timezone->valuestring != NULL)) {
-        replace_heap_string(&s_ip_api_info.timezone, timezone->valuestring);
-    }
-
-    cJSON *offset = cJSON_GetObjectItem(root, "offset");
-    if (cJSON_IsNumber(offset)) {
-        s_ip_api_info.utc_offset_seconds = (int32_t)offset->valueint;
-    }
-
-    has_ip_api_been_processed = 1;
-    cJSON_Delete(root);
-    return ESP_OK;
-}
-
-/*
- * Get IP API info
- */
-esp_err_t get_ip_api_info(ip_api_info_t *info){
-    if (info == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!has_ip_api_been_processed) {
-        return ESP_FAIL;
-    }
-    memcpy(info, &s_ip_api_info, sizeof(ip_api_info_t));
-    return ESP_OK;
 }
 
 /*

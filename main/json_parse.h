@@ -8,16 +8,6 @@
 #define WEATHER_DAILY_POINTS_MAX 7
 
 typedef struct {
-  char *country;
-  char *regionName;
-  char *city;
-  double lat;
-  double lon;
-  char *timezone;
-  int32_t utc_offset_seconds;
-} ip_api_info_t;
-
-typedef struct {
   int64_t time;
   float temperature_2m;
   int precipitation_probability;
@@ -70,9 +60,6 @@ typedef struct {
   weather_daily_point_t daily[WEATHER_DAILY_POINTS_MAX];
   size_t daily_count;
 } weather_forecast_t;
-
-esp_err_t process_ip_api_response(const char* response, size_t response_len);
-esp_err_t get_ip_api_info(ip_api_info_t *info);
 
 esp_err_t process_weather_hourly_response(const char* response, size_t response_len);
 esp_err_t process_weather_daily_response(const char* response, size_t response_len);

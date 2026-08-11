@@ -1,3 +1,3 @@
-idf_component_register(SRCS "ble.c" "weather_icons_24.c" "weather_icons_48.c" "cap_touch.c" "i2c.c" "json_parse.c" "time_sync.c" "lcd_ui.c" "call_api.c" "main.c" "rgb_lcd_panel.c" "wifi.c" "wifi_call.c"
+idf_component_register(SRCS "wifi_call.c" "ble.c" "weather_icons_24.c" "weather_icons_48.c" "cap_touch.c" "i2c.c" "json_parse.c" "time_sync.c" "lcd_ui.c" "call_api.c" "main.c" "rgb_lcd_panel.c" "wifi.c"
                        PRIV_REQUIRES esp_lcd esp_timer esp_driver_gpio esp_wifi esp_netif esp_event nvs_flash esp_http_client bt
                        INCLUDE_DIRS ".")

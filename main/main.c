@@ -16,12 +16,18 @@
 static const char *TAG = "display";
 
 // Optional manual weather location override.
-// Set to 1 to bypass IP geolocation and use the location below.
+// Set to 1 to bypass BLE location setting and use the location below.
+// Set to 0 to use BLE location setting.
 #define DISPLAY_USE_MANUAL_LOCATION 1
 #define DISPLAY_MANUAL_LATITUDE 37.5517
 #define DISPLAY_MANUAL_LONGITUDE -121.9519
 #define DISPLAY_MANUAL_TIMEZONE "America/Los_Angeles"
 #define DISPLAY_MANUAL_UTC_OFFSET_SECONDS (-7 * 3600)
+
+#define USE_MANUAL_WIFI_CREDENTIALS 0
+// For manual setting of SSID and password, go to sdkconfig.h and change
+// CONFIG_DISPLAY_WIFI_STA_SSID 
+// CONFIG_DISPLAY_WIFI_STA_PASSWORD
 
 /*
 * Main app entry point. Calls initialization functions for the LCD, UI, capacitive touch, and Wi-Fi call service.
@@ -100,6 +106,8 @@ void app_main(void)
         return;
     }
 #endif
+
+    wifi_call_set_use_manual_wifi_credentials(USE_MANUAL_WIFI_CREDENTIALS != 0);
 
     ret = wifi_call_start();
     if (ret != ESP_OK) {

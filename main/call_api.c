@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include "sdkconfig.h"
 #include "esp_err.h"
 #include "esp_check.h"
 #include "esp_http_client.h"
@@ -151,54 +150,6 @@ static esp_err_t perform_http_get(const char *url, http_response_buffer_t *respo
 	}
 
 	return ESP_OK;
-}
-
-/*
- * Call the ip-api.com API with the provided IPv6 address.
- */
-esp_err_t call_ip_api_with_ipv6(const char *ipv6){
-	if (ipv6 == NULL || ipv6[0] == '\0') {
-		return ESP_ERR_INVALID_ARG;
-	}
-
-	char encoded_ipv6[128] = {0};
-	ESP_RETURN_ON_ERROR(url_encode(ipv6, encoded_ipv6, sizeof(encoded_ipv6)), TAG,
-						"Failed to URL-encode IPv6");
-
-	char url[320] = {0};
-	int written = snprintf(url, sizeof(url),
-					"http://ip-api.com/json/"
-					"?fields=status,message,country,region,regionName,city,"
-					"lat,lon,timezone,offset,query&query=%s",
-					encoded_ipv6);
-	if (written < 0 || (size_t)written >= sizeof(url)) return ESP_ERR_INVALID_SIZE;
-
-	http_response_buffer_t response_buf = {0};
-	int status = 0;
-	esp_err_t err = perform_http_get(url, &response_buf, &status);
-	if (err != ESP_OK) {
-		ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
-		return err;
-	}
-	ESP_LOGI(TAG, "ip-api status=%d", status);
-	ESP_LOGI(TAG, "ip-api response=%s", response_buf.buffer ? response_buf.buffer : "");
-
-	process_ip_api_response(response_buf.buffer, response_buf.len);
-	ip_api_info_t info;
-	if (get_ip_api_info(&info) == ESP_OK) {
-		ESP_LOGI(TAG, "Processed ip-api response: country=%s, region=%s, city=%s, lat=%f, lon=%f, timezone=%s, offset=%ld",
-					info.country ? info.country : "N/A",
-					info.regionName ? info.regionName : "N/A",
-					info.city ? info.city : "N/A",
-					info.lat,
-					info.lon,
-					info.timezone ? info.timezone : "N/A",
-					(long)info.utc_offset_seconds);
-		}
-
-	free(response_buf.buffer);
-	if (status >= 200 && status < 300) return ESP_OK;
-	return ESP_FAIL;
 }
 
 /*

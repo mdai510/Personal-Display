@@ -9,6 +9,7 @@
 #include "host/ble_store.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
@@ -33,10 +34,13 @@ static bool advertising_requested = false;
 static bool is_ble_connected = false;
 static uint16_t active_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 static char device_name[32] = "PersDisplay";
+static bool s_allow_wifi_write = false;
+static bool s_allow_location_write = false;
 
 #define PROV_MAX_PAYLOAD_LEN 384
 static uint8_t provisioning_payload[PROV_MAX_PAYLOAD_LEN + 1] = {0};
 static uint16_t provisioning_payload_len = 0;
+static uint32_t s_location_info_version = 0;
 static ble_provisioning_data_t provisioning_data = {
     .wifi_info_obtained = false,
     .location_info_obtained = false,
@@ -298,6 +302,87 @@ static bool payload_looks_like_wifi_json(const char *json){
            strstr(json, "\"password\"") != NULL;
 }
 
+/*
+ * Save WiFi information to NVS.
+ * Assumes that provisioning_data.ssid and provisioning_data.password are already populated.
+ */
+static esp_err_t nvs_set_wifi(){
+    esp_err_t err;
+    nvs_handle_t nvs_handle;
+
+    err = nvs_open("wifi_info", NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open Wi-Fi NVS namespace: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_str(nvs_handle, "ssid", provisioning_data.ssid);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set SSID in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_set_str(nvs_handle, "password", provisioning_data.password);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set password in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_commit(nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit Wi-Fi NVS changes: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    nvs_close(nvs_handle);
+    return err;
+}
+
+static esp_err_t nvs_set_location(){
+    esp_err_t err;
+    nvs_handle_t nvs_handle;
+
+    err = nvs_open("location_info", NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open location NVS namespace: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_blob(nvs_handle, "latitude", &provisioning_data.latitude, sizeof(provisioning_data.latitude));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set latitude in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_set_blob(nvs_handle, "longitude", &provisioning_data.longitude, sizeof(provisioning_data.longitude));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set longitude in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_set_i32(nvs_handle, "utc_off_s", provisioning_data.utc_offset_seconds);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set UTC offset seconds in NVS: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    err = nvs_commit(nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit location NVS changes: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
+    }
+
+    nvs_close(nvs_handle);
+    return err;
+}
+
 static int provisioning_chr_access_cb(uint16_t conn_handle,
                                       uint16_t attr_handle,
                                       struct ble_gatt_access_ctxt *ctxt,
@@ -354,6 +439,16 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
 
+        if ((chr == PROV_CHR_WIFI && !s_allow_wifi_write) ||
+            (chr == PROV_CHR_LOCATION && !s_allow_location_write)) {
+            ESP_LOGW(TAG,
+                     "Rejected provisioning write for chr=%lu (wifi_allowed=%d, location_allowed=%d)",
+                     (unsigned long)chr,
+                     s_allow_wifi_write,
+                     s_allow_location_write);
+            return BLE_ATT_ERR_WRITE_NOT_PERMITTED;
+        }
+
         ESP_LOGI(TAG,
                  "Provisioning write received: len=%u att_mtu=%u",
                  (unsigned)payload_len,
@@ -369,9 +464,10 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
 
         provisioning_payload[out_len] = '\0';
         provisioning_payload_len = out_len;
-        ESP_LOGI(TAG, "Provisioning payload: %s", (char *)provisioning_payload);
 
         if (chr == PROV_CHR_WIFI) {
+            esp_err_t nvs_err;
+
             if (!parse_wifi_payload(provisioning_payload,
                                     provisioning_payload_len,
                                     provisioning_data.ssid,
@@ -385,9 +481,17 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
                 return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
             }
 
+            nvs_err = nvs_set_wifi();
+            if (nvs_err != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to persist Wi-Fi provisioning to NVS: %s", esp_err_to_name(nvs_err));
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
             provisioning_data.wifi_info_obtained = true;
-            ESP_LOGI(TAG, "Wi-Fi provisioning updated");
+            ESP_LOGI(TAG, "Wi-Fi provisioning updated (ssid=%s)", provisioning_data.ssid);
         } else {
+            esp_err_t nvs_err;
+
             if (!parse_location_payload(provisioning_payload,
                                         provisioning_payload_len,
                                         &provisioning_data.latitude,
@@ -402,7 +506,14 @@ static int provisioning_chr_access_cb(uint16_t conn_handle,
                 return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
             }
 
+            nvs_err = nvs_set_location();
+            if (nvs_err != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to persist location provisioning to NVS: %s", esp_err_to_name(nvs_err));
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
             provisioning_data.location_info_obtained = true;
+            s_location_info_version++;
             ESP_LOGI(TAG,
                      "Location provisioning updated: lat=%.6f lon=%.6f utc_offset=%s",
                      provisioning_data.latitude,
@@ -646,6 +757,22 @@ esp_err_t ble_get_identity_address_string(char *out_str, size_t out_len){
     return ESP_OK;
 }
 
+esp_err_t ble_get_device_name(char *out_name, size_t out_len){
+    size_t name_len;
+
+    if (out_name == NULL || out_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    name_len = strlen(device_name);
+    if (name_len + 1 > out_len) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    memcpy(out_name, device_name, name_len + 1);
+    return ESP_OK;
+}
+
 esp_err_t ble_get_provisioning_data(ble_provisioning_data_t *out_data){
     if (out_data == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -656,6 +783,83 @@ esp_err_t ble_get_provisioning_data(ble_provisioning_data_t *out_data){
     }
 
     memcpy(out_data, &provisioning_data, sizeof(*out_data));
+    return ESP_OK;
+}
+
+bool ble_has_wifi_info(void){
+    return provisioning_data.wifi_info_obtained;
+}
+
+bool ble_has_location_info(void){
+    return provisioning_data.location_info_obtained;
+}
+
+esp_err_t ble_get_wifi_info(char *out_ssid,
+                            size_t out_ssid_len,
+                            char *out_password,
+                            size_t out_password_len){
+    if (out_ssid == NULL || out_password == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (out_ssid_len == 0 || out_password_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!provisioning_data.wifi_info_obtained) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (strlen(provisioning_data.ssid) + 1 > out_ssid_len ||
+        strlen(provisioning_data.password) + 1 > out_password_len) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    memcpy(out_ssid, provisioning_data.ssid, strlen(provisioning_data.ssid) + 1);
+    memcpy(out_password, provisioning_data.password, strlen(provisioning_data.password) + 1);
+    return ESP_OK;
+}
+
+esp_err_t ble_get_location_info(double *out_latitude,
+                                double *out_longitude,
+                                char *out_utc_offset,
+                                size_t out_utc_offset_len,
+                                int32_t *out_utc_offset_seconds){
+    if (out_latitude == NULL || out_longitude == NULL || out_utc_offset == NULL ||
+        out_utc_offset_seconds == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (out_utc_offset_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!provisioning_data.location_info_obtained) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (strlen(provisioning_data.utc_offset) + 1 > out_utc_offset_len) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    *out_latitude = provisioning_data.latitude;
+    *out_longitude = provisioning_data.longitude;
+    *out_utc_offset_seconds = provisioning_data.utc_offset_seconds;
+    memcpy(out_utc_offset, provisioning_data.utc_offset, strlen(provisioning_data.utc_offset) + 1);
+    return ESP_OK;
+}
+
+uint32_t ble_get_location_info_version(void){
+    return s_location_info_version;
+}
+
+esp_err_t ble_set_write_permissions(bool allow_wifi_write, bool allow_location_write){
+    s_allow_wifi_write = allow_wifi_write;
+    s_allow_location_write = allow_location_write;
+    ESP_LOGI(TAG,
+             "BLE write permissions updated: wifi=%d location=%d",
+             s_allow_wifi_write,
+             s_allow_location_write);
     return ESP_OK;
 }
 

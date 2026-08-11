@@ -1,9 +1,7 @@
 #pragma once
 
-#include "esp_wifi_types_generic.h"
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 
 #define DISPLAY_WIFI_SSID CONFIG_DISPLAY_WIFI_STA_SSID
 #define DISPLAY_WIFI_PASS CONFIG_DISPLAY_WIFI_STA_PASSWORD
@@ -31,12 +29,10 @@
 
 esp_err_t wifi_station_init(void);
 
-esp_err_t wifi_station_connect(char* ssid, char* password);
+esp_err_t wifi_station_connect(const char *ssid, const char *password);
 
 esp_err_t wifi_station_disconnect(void);
 
 esp_err_t wifi_station_deinit(void);
 
-esp_err_t wifi_station_get_ipv6(char* ipv6_addr, size_t addr_len);
-esp_err_t wifi_station_wait_for_ipv6(uint32_t timeout_ms);
 bool wifi_station_is_connected(void);
