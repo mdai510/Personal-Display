@@ -12,7 +12,6 @@ sdkconfig.old
 # Python caches for local scripts/tests
 __pycache__/
 *.pyc
-.pytest_cache/
 
 # Managed components (optional to commit; ignored by default)
 managed_components/

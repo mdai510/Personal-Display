@@ -27,10 +27,11 @@ https://github.com/user-attachments/assets/7ab603d7-eb20-4904-991c-e32ce47bcc0e
 
 Settings/Setup:  
 1. Install ESP-IDF v6.0.1  
-2. Clone the project folder  
-3. Open the folder in VS Code.  
-4. Select the installed ESP-IDF version.  
-5. Build, select the serial port, then flash.
+2. Install ESP-IDF VSCode Extension
+3. Clone the project folder  
+4. Open the folder in VS Code.  
+5. Select the installed ESP-IDF version (ctrl+shift+p -> ESP-IDF: Select Current ESP-IDF Version).  
+6. Build, select the serial port, then flash.   
      
 If you want to skip bluetooth wifi/location configuration:  
 set your wifi ssid and password in ESP-IDF configuration editor or by changing the values in sdkconfig.h  
