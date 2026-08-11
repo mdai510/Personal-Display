@@ -14,10 +14,12 @@ GT911 Capacitive Touch
 PCA9557 I/O Expander  
 ESP-IDF  
 
-Display Demo (UI + touchscreen): 
+<img width="2994" height="1544" alt="image" src="https://github.com/user-attachments/assets/12a181a6-0f88-45d6-a889-9d8ee1c2fcbe" />  
+
+Display Demo Video (UI + touchscreen): 
 https://github.com/user-attachments/assets/3fbd07ed-7a2e-4cae-93bb-e132db5bea91  
 
-Bluetooth Connect Demo:  
+Bluetooth Connect Demo Video:  
 Video shows Wi-Fi failing at first, then a bad and good BLE Wi-Fi request  
 Then, it demonstrates changing location  
 https://github.com/user-attachments/assets/7ab603d7-eb20-4904-991c-e32ce47bcc0e  
