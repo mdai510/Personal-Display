@@ -12,6 +12,7 @@ Components:
 CrowPanel ESP32 HMI 7.0-inch Display (ESP32-S3)  
 GT911 Capacitive Touch  
 PCA9557 I/O Expander  
+NimBLE  
 ESP-IDF  
 
 <img width="2994" height="1544" alt="image" src="https://github.com/user-attachments/assets/12a181a6-0f88-45d6-a889-9d8ee1c2fcbe" />  
@@ -38,14 +39,18 @@ set your wifi ssid and password in ESP-IDF configuration editor or by changing t
 in main.c set location info
 (i included my sdkconfig file with personal info removed, since many BLE config values, LCD pin values, and buffer size values were changed)  
 
-Sources:
+Sources:  
 https://www.elecrow.com/wiki/esp32-display-702727-intelligent-touch-screen-wi-fi26ble-800480-hmi-display.html  
 https://erikflowers.github.io/weather-icons/  
-https://docs.espressif.com  
+https://docs.espressif.com (NVS, BLE, I2C, WiFi Event Loop  
 https://open-meteo.com/en/docs  
 https://ip-api.com  
 https://learn.adafruit.com/introduction-to-bluetooth-low-energy  
 [pca9557.pdf](https://github.com/user-attachments/files/30683521/pca9557.pdf)  
 [GT911_registers.pdf](https://github.com/user-attachments/files/30683518/GT911_registers.pdf)  
 [GT911.pdf](https://github.com/user-attachments/files/30683515/GT911.pdf)  
+
+Future Work:
+Make Bluetooth app  
+Add additional modules (but space is a concern so maybe not)  
 
