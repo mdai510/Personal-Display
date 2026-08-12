@@ -9,7 +9,7 @@ Features:
 - Auto-refresh of weather data every 30 mins  
 - Wi-Fi station and BLE GAP Advertising / GATT server only on during operation (API calls or Wi-Fi/location config)  
 - SNTP Time Synchronization
-- Screen timeout after 90 mins
+- Screen timeout after 90 mins, and touch-wakeup
   
 Components:  
 - CrowPanel ESP32 HMI 7.0-inch Display (ESP32-S3)  
