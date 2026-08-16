@@ -51,6 +51,7 @@ static EventGroupHandle_t s_wifi_call_event_group = NULL;
 static bool s_wifi_call_task_started = false;
 static bool s_use_manual_wifi_credentials = false;
 static bool s_manual_location_set = false;
+static bool s_time_synced = false;
 static location_data_t s_manual_location = {0};
 
 static esp_err_t wifi_call_load_wifi_from_nvs(char *ssid, size_t ssid_len, char *password, size_t password_len);
@@ -96,6 +97,24 @@ static void wifi_call_show_ble_message(const char *base_message, bool location_c
     }
 }
 
+static esp_err_t wifi_call_sync_time_if_needed(const location_data_t *location) {
+    esp_err_t err;
+
+    if (location == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (s_time_synced) {
+        return ESP_OK;
+    }
+
+    err = time_sync_once_with_utc_offset(location->utc_offset_seconds, location->utc_offset);
+    if (err == ESP_OK) {
+        s_time_synced = true;
+    }
+    return err;
+}
+
 void wifi_call_set_use_manual_wifi_credentials(bool enable) {
     s_use_manual_wifi_credentials = enable;
 }
@@ -118,6 +137,7 @@ esp_err_t wifi_call_set_manual_location(double latitude,
     s_manual_location.utc_offset_seconds = utc_offset_seconds;
     memcpy(s_manual_location.utc_offset, timezone, strlen(timezone) + 1);
     s_manual_location_set = true;
+    s_time_synced = false;
     return ESP_OK;
 }
 
@@ -420,6 +440,8 @@ static esp_err_t wifi_call_wait_for_location_payload_since(location_data_t *out_
                                     sizeof(out_location->utc_offset),
                                     &out_location->utc_offset_seconds);
         if (err == ESP_OK) {
+            /* A successful BLE location update requires a fresh SNTP sync on the next weather fetch. */
+            s_time_synced = false;
             lcd_ui_show_message_screen("Location received\nRetrying weather...");
             (void)ble_set_write_permissions(false, false);
             return ESP_OK;
@@ -434,8 +456,7 @@ static esp_err_t wifi_call_fetch_and_show_weather(void) {
     location_data_t location = {0};
 
     if (s_manual_location_set) {
-        err = time_sync_once_with_utc_offset(s_manual_location.utc_offset_seconds,
-                                             s_manual_location.utc_offset);
+        err = wifi_call_sync_time_if_needed(&s_manual_location);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Time sync failed for manual location: %s", esp_err_to_name(err));
             return err;
@@ -450,7 +471,7 @@ static esp_err_t wifi_call_fetch_and_show_weather(void) {
 
     err = wifi_call_load_location_from_nvs(&location);
     if (err == ESP_OK) {
-        err = time_sync_once_with_utc_offset(location.utc_offset_seconds, location.utc_offset);
+        err = wifi_call_sync_time_if_needed(&location);
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Time sync failed for saved location: %s", esp_err_to_name(err));
             return err;
@@ -471,6 +492,8 @@ static esp_err_t wifi_call_run_onboarding(void) {
     char ssid[33] = {0};
     char password[65] = {0};
     esp_err_t err;
+
+s_time_synced = false;
 
     for (;;) {
         err = wifi_call_connect_with_retries();
@@ -505,15 +528,15 @@ static esp_err_t wifi_call_run_onboarding(void) {
             continue;
         }
 
-        err = wifi_call_fetch_weather_from_location(&location);
+        err = wifi_call_sync_time_if_needed(&location);
         if (err != ESP_OK) {
-            lcd_ui_show_message_screen("Invalid location\nSend again via Bluetooth");
+            wifi_call_show_ble_message("Time sync failed\nRetry location via Bluetooth", false);
             continue;
         }
 
-        err = time_sync_once_with_utc_offset(location.utc_offset_seconds, location.utc_offset);
+        err = wifi_call_fetch_weather_from_location(&location);
         if (err != ESP_OK) {
-            wifi_call_show_ble_message("Time sync failed\nRetry location via Bluetooth", false);
+            lcd_ui_show_message_screen("Invalid location\nSend again via Bluetooth");
             continue;
         }
 
@@ -541,6 +564,7 @@ static void wifi_call_task(void *arg) {
 
         (void)ble_set_write_permissions(false, false);
 
+        s_time_synced = false;
         xEventGroupClearBits(s_wifi_call_event_group, WIFI_CALL_EVENT_WEATHER_READY);
         lcd_ui_show_message_screen("Starting connectivity...");
 
@@ -574,13 +598,13 @@ static void wifi_call_task(void *arg) {
                         continue;
                     }
 
-                    if (wifi_call_fetch_weather_from_location(&location) != ESP_OK) {
-                        lcd_ui_show_message_screen("Invalid location\nSend again via Bluetooth");
+                    if (wifi_call_sync_time_if_needed(&location) != ESP_OK) {
+                        lcd_ui_show_message_screen("Time sync failed\nSend location again");
                         continue;
                     }
 
-                    if (time_sync_once_with_utc_offset(location.utc_offset_seconds, location.utc_offset) != ESP_OK) {
-                        lcd_ui_show_message_screen("Time sync failed\nSend location again");
+                    if (wifi_call_fetch_weather_from_location(&location) != ESP_OK) {
+                        lcd_ui_show_message_screen("Invalid location\nSend again via Bluetooth");
                         continue;
                     }
 
