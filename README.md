@@ -18,7 +18,7 @@ Components:
 - NimBLE  
 - ESP-IDF  
 
-<img width="2994" height="1544" alt="image" src="https://github.com/user-attachments/assets/12a181a6-0f88-45d6-a889-9d8ee1c2fcbe" />  
+<img width="3192" height="1854" alt="image" src="https://github.com/user-attachments/assets/b570409b-c39e-44fb-91eb-141e6c140aec" />  
 
 Display Demo Video (UI + touchscreen): 
 https://github.com/user-attachments/assets/3fbd07ed-7a2e-4cae-93bb-e132db5bea91  
@@ -33,6 +33,8 @@ https://github.com/user-attachments/assets/7ab603d7-eb20-4904-991c-e32ce47bcc0e
 - Location UUID: 0xFFF2  
 - Format: {"lat":12.3456,"lon":-100.6789,"loc_name":"City,State","utc_offset":"<either +/-XX:XX or +/-XXXX>"} (ex. -12:00 for UTC-12)  
 If I ever do make an app it will just format these automatically for less hassle   
+
+(UI is slightly outdated for the demos above)  
 
 Settings/Setup:  
 1. Install ESP-IDF v6.0.1  
