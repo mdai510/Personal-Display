@@ -23,6 +23,7 @@ static const char *TAG = "wifi_call";
 #define WIFI_CALL_EVENT_LOCATION_CHANGE BIT1
 #define WIFI_CALL_EVENT_REFRESH_REQUEST BIT2
 #define WIFI_CALL_EVENT_LOCATION_CHANGE_CANCEL BIT3
+#define WIFI_CALL_EVENT_LOCATION_RETRY_REQUEST BIT4
 
 #define WIFI_INFO_NAMESPACE "wifi_info"
 #define LOCATION_INFO_NAMESPACE "location_info"
@@ -38,6 +39,7 @@ static const char *TAG = "wifi_call";
 #define BLE_POLL_DELAY_MS 300
 #define WEATHER_REFRESH_MS (10 * 60 * 1000)
 #define WIFI_CALL_ERR_LOCATION_CHANGE_CANCELED ESP_FAIL
+#define WIFI_CALL_ERR_LOCATION_RETRY_SUCCEEDED ESP_ERR_INVALID_STATE
 
 typedef struct {
     double latitude;
@@ -71,6 +73,7 @@ static esp_err_t wifi_call_fetch_and_show_weather(void);
 static esp_err_t wifi_call_run_onboarding(void);
 static esp_err_t wifi_call_fetch_weather_from_location(const location_data_t *location);
 static void wifi_call_show_ble_message(const char *base_message, bool location_change_screen);
+static void wifi_call_show_ble_location_retry_message(const char *base_message);
 
 static void wifi_call_show_ble_message(const char *base_message, bool location_change_screen) {
     char device_name[32] = "PersDisplay";
@@ -95,6 +98,27 @@ static void wifi_call_show_ble_message(const char *base_message, bool location_c
     } else {
         (void)lcd_ui_show_message_screen(message);
     }
+}
+
+static void wifi_call_show_ble_location_retry_message(const char *base_message) {
+    char device_name[32] = "PersDisplay";
+    char message[224];
+
+    if (base_message == NULL) {
+        return;
+    }
+
+    if (ble_get_device_name(device_name, sizeof(device_name)) != ESP_OK) {
+        snprintf(device_name, sizeof(device_name), "PersDisplay");
+    }
+
+    snprintf(message,
+             sizeof(message),
+             "%s\n\nPair with device:\n%s",
+             base_message,
+             device_name);
+
+    (void)lcd_ui_show_location_retry_screen(message);
 }
 
 static esp_err_t wifi_call_sync_time_if_needed(const location_data_t *location) {
@@ -187,6 +211,15 @@ esp_err_t wifi_call_request_location_change_cancel(void) {
     }
 
     xEventGroupSetBits(s_wifi_call_event_group, WIFI_CALL_EVENT_LOCATION_CHANGE_CANCEL);
+    return ESP_OK;
+}
+
+esp_err_t wifi_call_request_location_retry(void) {
+    if (s_wifi_call_event_group == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    xEventGroupSetBits(s_wifi_call_event_group, WIFI_CALL_EVENT_LOCATION_RETRY_REQUEST);
     return ESP_OK;
 }
 
@@ -412,18 +445,41 @@ static esp_err_t wifi_call_wait_for_location_payload_since(location_data_t *out_
     }
 
     (void)ble_set_write_permissions(false, true);
-    wifi_call_show_ble_message("Need location\nSend location information over Bluetooth", allow_cancel);
+    (void)ble_start_advertising();
+    if (allow_cancel) {
+        wifi_call_show_ble_message("Need location\nSend location information over Bluetooth", true);
+    } else {
+        wifi_call_show_ble_location_retry_message("Need location\nSend location information over Bluetooth");
+    }
 
     for (;;) {
         uint32_t current_version;
+        EventBits_t bits = xEventGroupGetBits(s_wifi_call_event_group);
 
         if (allow_cancel) {
-            EventBits_t bits = xEventGroupGetBits(s_wifi_call_event_group);
             if ((bits & WIFI_CALL_EVENT_LOCATION_CHANGE_CANCEL) != 0) {
                 xEventGroupClearBits(s_wifi_call_event_group, WIFI_CALL_EVENT_LOCATION_CHANGE_CANCEL);
                 (void)ble_set_write_permissions(false, false);
                 return WIFI_CALL_ERR_LOCATION_CHANGE_CANCELED;
             }
+        } else if ((bits & WIFI_CALL_EVENT_LOCATION_RETRY_REQUEST) != 0) {
+            esp_err_t retry_err;
+
+            xEventGroupClearBits(s_wifi_call_event_group, WIFI_CALL_EVENT_LOCATION_RETRY_REQUEST);
+            retry_err = lcd_ui_set_message_retry_in_progress(true);
+            if (retry_err != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to set retrying UI state: %s", esp_err_to_name(retry_err));
+            }
+
+            retry_err = wifi_call_fetch_and_show_weather();
+            if (retry_err == ESP_OK) {
+                xEventGroupSetBits(s_wifi_call_event_group, WIFI_CALL_EVENT_WEATHER_READY);
+                (void)ble_set_write_permissions(false, false);
+                return WIFI_CALL_ERR_LOCATION_RETRY_SUCCEEDED;
+            }
+
+            ESP_LOGW(TAG, "Location retry weather fetch failed: %s", esp_err_to_name(retry_err));
+            (void)lcd_ui_set_message_retry_in_progress(false);
         }
 
         current_version = ble_get_location_info_version();
@@ -524,6 +580,12 @@ s_time_synced = false;
 
         wifi_call_show_ble_message("Weather fetch failed\nNeed location via Bluetooth", false);
         err = wifi_call_wait_for_location_payload(&location);
+        if (err == WIFI_CALL_ERR_LOCATION_RETRY_SUCCEEDED) {
+            if (ble_has_wifi_info() && (ble_has_location_info() || s_manual_location_set)) {
+                ble_stop_advertising();
+            }
+            return ESP_OK;
+        }
         if (err != ESP_OK) {
             continue;
         }

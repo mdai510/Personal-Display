@@ -63,6 +63,7 @@ static const char *TAG = "lcd_ui";
 
 #define UI_COLOR_PRIMARY_HEX 0xFFFFFF
 #define UI_COLOR_HUMIDITY_PRECIP_HEX 0x33A1FF
+#define UI_COLOR_SUN_EVENT_HEX 0xFFD700
 
 #define WEATHER_PANEL_HALF_H ((DISPLAY_LCD_V_RES - WEATHER_PANEL_TOP_OFFSET) / 2)
 #define WEATHER_HOURLY_PANEL_H (WEATHER_PANEL_HALF_H - WEATHER_ACTION_ROW_H)
@@ -266,7 +267,11 @@ static int s_hourly_forecast_page = 0;
 static char s_message_text[160] = "starting...";
 static char s_location_name_text[64] = "";
 static bool s_message_show_close_button = false;
+static bool s_message_show_retry_button = false;
+static bool s_message_retry_in_progress = false;
 static lv_obj_t *s_message_close_label = NULL;
+static lv_obj_t *s_message_retry_icon_label = NULL;
+static lv_obj_t *s_message_retry_text_label = NULL;
 
 static TickType_t last_touch_ticks = 0;
 static bool s_is_display_sleeping = false;
@@ -294,16 +299,20 @@ static bool handle_daily_view_touch(const touch_event_t *event);
 static bool handle_hourly_forecast_touch(const touch_event_t *event);
 static bool handle_change_location_touch(const touch_event_t *event);
 static bool handle_message_screen_close_touch(const touch_event_t *event);
+static bool handle_message_screen_retry_touch(const touch_event_t *event);
 static void set_hourly_forecast_page(int page);
 static bool handle_time_band_refresh_touch(const touch_event_t *event);
 static bool point_in_rect(int x, int y, int x1, int y1, int x2, int y2);
 static bool format_local_date_with_day_offset(size_t day_offset, char *out, size_t out_len);
 static size_t get_hourly_display_start_index(const weather_forecast_t *forecast);
 static lv_color_t weather_icon_color_from_temp_f(float temp_f);
+static uint32_t weather_color_hex_from_temp_f(float temp_f);
 static void set_icon_temp_color(lv_obj_t *label, float temp_f);
+static void format_colored_temp_digits(char *buf, size_t buf_len, int temp_f, uint32_t temp_color_hex);
 static const char *weather_code_to_interpretation(int code);
 static void update_location_name_label(void);
 static void update_last_refreshed_label(void);
+static void update_message_retry_label(void);
 static void render_message_ui(lv_display_t *disp);
 static void render_message_ui_cb(lv_display_t *disp, void *user_ctx);
 static lv_obj_t *create_hourly_forecast_cell(lv_obj_t *parent,
@@ -364,6 +373,64 @@ static lv_color_t weather_icon_color_from_temp_f(float temp_f)
         return lv_color_hex(0x9B00FF); // vivid purple
     }
     return lv_color_hex(0xFF00C8); // vivid magenta
+}
+
+/*
+ * Map Fahrenheit temperature bands to RGB hex colors used for text recoloring.
+ */
+static uint32_t weather_color_hex_from_temp_f(float temp_f)
+{
+    if (temp_f >= 100.0f) {
+        return 0xFF1A1A; // bright red
+    }
+    if (temp_f >= 90.0f) {
+        return 0xFF5A00; // vivid dark orange
+    }
+    if (temp_f >= 80.0f) {
+        return 0xFFA300; // vivid orange
+    }
+    if (temp_f >= 70.0f) {
+        return 0x66FF66; // bright light green
+    }
+    if (temp_f >= 60.0f) {
+        return 0x00C853; // vivid green
+    }
+    if (temp_f >= 50.0f) {
+        return 0x00E5C8; // bright teal
+    }
+    if (temp_f >= 40.0f) {
+        return 0x5EC8FF; // vivid light blue
+    }
+    if (temp_f >= 30.0f) {
+        return 0x2F7DFF; // vivid blue
+    }
+    if (temp_f >= 20.0f) {
+        return 0x0050FF; // vivid dark blue
+    }
+    if (temp_f >= 10.0f) {
+        return 0x0030CC; // vivid navy
+    }
+    if (temp_f >= 0.0f) {
+        return 0x9B00FF; // vivid purple
+    }
+    return 0xFF00C8; // vivid magenta
+}
+
+/*
+ * Format temperature with only numeric digits colorized using LVGL recolor syntax.
+ */
+static void format_colored_temp_digits(char *buf, size_t buf_len, int temp_f, uint32_t temp_color_hex)
+{
+    if (buf == NULL || buf_len == 0) {
+        return;
+    }
+
+    unsigned int abs_temp = (unsigned int)((temp_f < 0) ? -temp_f : temp_f);
+    if (temp_f < 0) {
+        snprintf(buf, buf_len, "-#%06X %u#", (unsigned int)temp_color_hex, abs_temp);
+    } else {
+        snprintf(buf, buf_len, "#%06X %u#", (unsigned int)temp_color_hex, abs_temp);
+    }
 }
 
 /*
@@ -600,13 +667,13 @@ static lv_obj_t *create_weather_metric_row(lv_obj_t *parent, lv_obj_t **icon_lab
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(row, 8, 0);
 
-    *icon_label_out = lv_label_create(row);
-    lv_obj_set_style_text_color(*icon_label_out, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
-    lv_obj_set_style_text_font(*icon_label_out, &weather_icons_24, 0);
-
     *value_label_out = lv_label_create(row);
     lv_obj_set_style_text_color(*value_label_out, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
     lv_obj_set_style_text_font(*value_label_out, font_normal, 0);
+
+    *icon_label_out = lv_label_create(row);
+    lv_obj_set_style_text_color(*icon_label_out, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
+    lv_obj_set_style_text_font(*icon_label_out, &weather_icons_24, 0);
 
     return row;
 }
@@ -799,6 +866,7 @@ static lv_obj_t *create_weather_forecast_row(lv_obj_t *parent,
     lv_obj_set_style_text_font(*hilo_label_out, font_normal, 0);
     lv_obj_set_style_text_align(*hilo_label_out, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_width(*hilo_label_out, LV_PCT(100));
+    lv_label_set_recolor(*hilo_label_out, true);
 
     lv_obj_t *pop_row = lv_obj_create(right);
     lv_obj_remove_style_all(pop_row);
@@ -1174,6 +1242,22 @@ static void update_last_refreshed_label(void)
 }
 
 /*
+ * Update the retry button text on the message screen.
+ */
+static void update_message_retry_label(void)
+{
+    if (s_message_retry_text_label == NULL) {
+        return;
+    }
+
+    if (s_message_retry_in_progress) {
+        lv_label_set_text(s_message_retry_text_label, "Retrying");
+    } else {
+        lv_label_set_text(s_message_retry_text_label, "Retry");
+    }
+}
+
+/*
  * Time band timer callback.
  */
 static void time_band_timer_cb(lv_timer_t *timer)
@@ -1297,6 +1381,45 @@ static bool handle_message_screen_close_touch(const touch_event_t *event)
         ESP_LOGI(TAG, "Location change canceled from message screen");
     }
 
+    return true;
+}
+
+/*
+ * Handle top-right retry action touch on the BLE location message screen.
+ */
+static bool handle_message_screen_retry_touch(const touch_event_t *event)
+{
+    if (event == NULL || event->touch_type != TAP || !s_starting_panel.visible ||
+        s_message_show_close_button || !s_message_show_retry_button || s_message_retry_in_progress) {
+        return false;
+    }
+
+    if (s_message_retry_icon_label == NULL || s_message_retry_text_label == NULL) {
+        return false;
+    }
+
+    lv_area_t icon_area;
+    lv_area_t text_area;
+    lv_obj_get_coords(s_message_retry_icon_label, &icon_area);
+    lv_obj_get_coords(s_message_retry_text_label, &text_area);
+
+    int x1 = MIN(icon_area.x1, text_area.x1) - 12;
+    int y1 = MIN(icon_area.y1, text_area.y1) - 8;
+    int x2 = MAX(icon_area.x2, text_area.x2) + 12;
+    int y2 = MAX(icon_area.y2, text_area.y2) + 8;
+
+    if (!point_in_rect(event->x, event->y, x1, y1, x2, y2)) {
+        return false;
+    }
+
+    if (wifi_call_request_location_retry() != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to send location retry request");
+        return true;
+    }
+
+    s_message_retry_in_progress = true;
+    update_message_retry_label();
+    ESP_LOGI(TAG, "Location weather retry requested from message screen");
     return true;
 }
 
@@ -1583,6 +1706,7 @@ static void render_weather_current_ui(lv_display_t *disp)
         lv_obj_set_style_text_align(s_weather_hilo_label, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_set_width(s_weather_hilo_label, LV_PCT(100));
         lv_label_set_long_mode(s_weather_hilo_label, LV_LABEL_LONG_WRAP);
+        lv_label_set_recolor(s_weather_hilo_label, true);
 
         create_weather_right_icon_row(s_weather_right_col, &s_weather_today_pop_icon_label, &s_weather_today_pop_label);
         create_weather_right_icon_row(s_weather_right_col, &s_weather_sunrise_icon_label, &s_weather_sunrise_label);
@@ -1684,7 +1808,7 @@ static void render_weather_current_ui(lv_display_t *disp)
     set_label_to_icon_id(s_weather_cloud_icon_label, &weather_icons_24, WEATHER_ICON_SINGLE_CLOUD);
 
     lv_obj_set_style_text_color(s_weather_humidity_label, lv_color_hex(UI_COLOR_HUMIDITY_PRECIP_HEX), 0);
-    lv_label_set_text_fmt(s_weather_humidity_label, "%d%%", current->relative_humidity_2m);
+    lv_label_set_text_fmt(s_weather_humidity_label, "Humidity %d", current->relative_humidity_2m);
     format_value_1dp(value_buf, sizeof(value_buf), "", current->wind_speed_10m, " mph");
     lv_label_set_text(s_weather_wind_label, value_buf);
     lv_label_set_text_fmt(s_weather_cloud_label, "%d%%", current->cloud_cover);
@@ -1693,7 +1817,17 @@ static void render_weather_current_ui(lv_display_t *disp)
         const weather_daily_point_t *today = &forecast.daily[0];
         int high = (int)(today->temperature_2m_max + (today->temperature_2m_max >= 0.0f ? 0.5f : -0.5f));
         int low = (int)(today->temperature_2m_min + (today->temperature_2m_min >= 0.0f ? 0.5f : -0.5f));
-        lv_label_set_text_fmt(s_weather_hilo_label, "H: %d F\n\nL: %d F", high, low);
+        char high_colored[24];
+        char low_colored[24];
+        format_colored_temp_digits(high_colored,
+                                   sizeof(high_colored),
+                                   high,
+                                   weather_color_hex_from_temp_f(today->temperature_2m_max));
+        format_colored_temp_digits(low_colored,
+                                   sizeof(low_colored),
+                                   low,
+                                   weather_color_hex_from_temp_f(today->temperature_2m_min));
+        lv_label_set_text_fmt(s_weather_hilo_label, "H: %s F\n\nL: %s F", high_colored, low_colored);
         lv_obj_set_style_text_color(s_weather_today_pop_label, lv_color_hex(UI_COLOR_HUMIDITY_PRECIP_HEX), 0);
         lv_label_set_text_fmt(s_weather_today_pop_label, "%d%%", today->precipitation_probability_max);
 
@@ -1722,8 +1856,8 @@ static void render_weather_current_ui(lv_display_t *disp)
     }
 
     lv_obj_set_style_text_color(s_weather_today_pop_icon_label, lv_color_hex(UI_COLOR_HUMIDITY_PRECIP_HEX), 0);
-    lv_obj_set_style_text_color(s_weather_sunrise_icon_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
-    lv_obj_set_style_text_color(s_weather_sunset_icon_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
+    lv_obj_set_style_text_color(s_weather_sunrise_icon_label, lv_color_hex(UI_COLOR_SUN_EVENT_HEX), 0);
+    lv_obj_set_style_text_color(s_weather_sunset_icon_label, lv_color_hex(UI_COLOR_SUN_EVENT_HEX), 0);
     set_label_to_icon_id(s_weather_today_pop_icon_label, &weather_icons_24, WEATHER_ICON_RAINDROP);
     set_label_to_icon_id(s_weather_sunrise_icon_label, &weather_icons_24, WEATHER_ICON_SUNRISE);
     set_label_to_icon_id(s_weather_sunset_icon_label, &weather_icons_24, WEATHER_ICON_SUNSET);
@@ -1790,7 +1924,17 @@ static void render_weather_current_ui(lv_display_t *disp)
 
             int f_high = (int)(d->temperature_2m_max + (d->temperature_2m_max >= 0.0f ? 0.5f : -0.5f));
             int f_low = (int)(d->temperature_2m_min + (d->temperature_2m_min >= 0.0f ? 0.5f : -0.5f));
-            lv_label_set_text_fmt(s_forecast_hilo_labels[i], "%d / %d F", f_high, f_low);
+            char f_high_colored[24];
+            char f_low_colored[24];
+            format_colored_temp_digits(f_high_colored,
+                                       sizeof(f_high_colored),
+                                       f_high,
+                                       weather_color_hex_from_temp_f(d->temperature_2m_max));
+            format_colored_temp_digits(f_low_colored,
+                                       sizeof(f_low_colored),
+                                       f_low,
+                                       weather_color_hex_from_temp_f(d->temperature_2m_min));
+            lv_label_set_text_fmt(s_forecast_hilo_labels[i], "%s / %s F", f_high_colored, f_low_colored);
             lv_obj_set_style_text_color(s_forecast_pop_labels[i], lv_color_hex(UI_COLOR_HUMIDITY_PRECIP_HEX), 0);
             lv_label_set_text_fmt(s_forecast_pop_labels[i], "%d%%", d->precipitation_probability_max);
             lv_obj_set_style_text_color(s_forecast_pop_icon_labels[i], lv_color_hex(UI_COLOR_HUMIDITY_PRECIP_HEX), 0);
@@ -1897,6 +2041,28 @@ static void render_message_ui(lv_display_t *disp)
         lv_obj_align(s_message_close_label, LV_ALIGN_TOP_RIGHT, -10, 8);
     }
 
+    if (s_message_retry_icon_label == NULL) {
+        s_message_retry_icon_label = lv_label_create(s_starting_panel.root);
+        lv_obj_set_style_text_color(s_message_retry_icon_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
+        if (!set_label_to_icon_id(s_message_retry_icon_label, &weather_icons_24, WEATHER_ICON_REFRESH)) {
+            lv_obj_set_style_text_font(s_message_retry_icon_label, font_normal, 0);
+            lv_label_set_text(s_message_retry_icon_label, "R");
+        }
+        lv_obj_align(s_message_retry_icon_label, LV_ALIGN_TOP_RIGHT, -10, 8);
+    }
+
+    if (s_message_retry_text_label == NULL) {
+        s_message_retry_text_label = lv_label_create(s_starting_panel.root);
+        lv_obj_set_style_text_color(s_message_retry_text_label, lv_color_hex(UI_COLOR_PRIMARY_HEX), 0);
+        lv_obj_set_style_text_font(s_message_retry_text_label, font_normal, 0);
+        update_message_retry_label();
+        lv_obj_align_to(s_message_retry_text_label,
+                        s_message_retry_icon_label,
+                        LV_ALIGN_OUT_LEFT_MID,
+                        -8,
+                        0);
+    }
+
     s_starting_panel.x = 0;
     s_starting_panel.y = 0;
     s_starting_panel.w = DISPLAY_LCD_H_RES;
@@ -1911,6 +2077,24 @@ static void render_message_ui(lv_display_t *disp)
             lv_obj_clear_flag(s_message_close_label, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_add_flag(s_message_close_label, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    if (s_message_retry_icon_label != NULL && s_message_retry_text_label != NULL) {
+        update_message_retry_label();
+        lv_obj_align(s_message_retry_icon_label, LV_ALIGN_TOP_RIGHT, -10, 8);
+        lv_obj_align_to(s_message_retry_text_label,
+                        s_message_retry_icon_label,
+                        LV_ALIGN_OUT_LEFT_MID,
+                        -8,
+                        0);
+
+        if (s_message_show_retry_button && !s_message_show_close_button) {
+            lv_obj_clear_flag(s_message_retry_icon_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(s_message_retry_text_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(s_message_retry_icon_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(s_message_retry_text_label, LV_OBJ_FLAG_HIDDEN);
         }
     }
 
@@ -2059,6 +2243,9 @@ static void lvgl_port_task(void *arg)
                 rgb_lcd_backlight_set(true);
             } else {
                 ESP_LOGI(TAG, "Touch event received: type=%d, x=%d, y=%d", touch_event_data.touch_type, touch_event_data.x, touch_event_data.y);
+                                if (handle_message_screen_retry_touch(&touch_event_data)) {
+                                    continue;
+                                }
                 if (handle_message_screen_close_touch(&touch_event_data)) {
                   continue;
                 }
@@ -2233,6 +2420,21 @@ esp_err_t lcd_ui_show_message_screen(const char *message)
 
     snprintf(s_message_text, sizeof(s_message_text), "%s", message);
     s_message_show_close_button = false;
+    s_message_show_retry_button = false;
+    s_message_retry_in_progress = false;
+    return lcd_ui_render(render_message_ui_cb, NULL);
+}
+
+esp_err_t lcd_ui_show_location_retry_screen(const char *message)
+{
+    if (message == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    snprintf(s_message_text, sizeof(s_message_text), "%s", message);
+    s_message_show_close_button = false;
+    s_message_show_retry_button = true;
+    s_message_retry_in_progress = false;
     return lcd_ui_render(render_message_ui_cb, NULL);
 }
 
@@ -2244,6 +2446,19 @@ esp_err_t lcd_ui_show_location_change_screen(const char *message)
 
     snprintf(s_message_text, sizeof(s_message_text), "%s", message);
     s_message_show_close_button = true;
+    s_message_show_retry_button = false;
+    s_message_retry_in_progress = false;
+    return lcd_ui_render(render_message_ui_cb, NULL);
+}
+
+esp_err_t lcd_ui_set_message_retry_in_progress(bool in_progress)
+{
+    s_message_retry_in_progress = in_progress;
+
+    if (!s_starting_panel.visible || !s_message_show_retry_button) {
+        return ESP_OK;
+    }
+
     return lcd_ui_render(render_message_ui_cb, NULL);
 }
 
