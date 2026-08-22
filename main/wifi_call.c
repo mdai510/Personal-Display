@@ -408,6 +408,7 @@ static esp_err_t wifi_call_wait_for_wifi_payload_since(char *ssid,
     esp_err_t err;
 
     (void)ble_set_write_permissions(true, false);
+    (void)ble_start_advertising();
     wifi_call_show_ble_message("Wi-Fi failed\nSend SSID/password over Bluetooth", false);
 
     for (;;) {

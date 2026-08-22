@@ -50,13 +50,6 @@ void app_main(void)
         return;
     }
 
-    ret = ble_start_advertising();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start BLE advertising: %s", esp_err_to_name(ret));
-        return;
-    }
-    ESP_LOGI(TAG, "BLE advertising started for bring-up test");
-  
     ESP_ERROR_CHECK(rgb_lcd_backlight_init());
     ESP_LOGI(TAG, "Initialize LCD backlight");
     ESP_LOGI(TAG, "Turn off LCD backlight");
